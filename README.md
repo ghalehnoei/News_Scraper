@@ -1,10 +1,10 @@
-# News Ingestion Platform - Phase 1
+# News Ingestion Platform
 
-Enterprise Persian news ingestion platform - Phase 1: Project Skeleton
+Enterprise Persian news ingestion platform for collecting and aggregating news from multiple Persian news sources.
 
 ## Overview
 
-This is the foundational skeleton for a news ingestion platform that will collect news from Persian news sources. Phase 1 focuses exclusively on infrastructure, structure, and contracts - no business logic or scraping functionality.
+This platform collects news from 5 major Persian news sources (ISNA, MehrNews, IRNA, Fars, Tasnim), normalizes categories, stores images in S3-compatible storage, and provides a web interface and API for accessing the aggregated news.
 
 ## Architecture
 
@@ -19,12 +19,20 @@ This is the foundational skeleton for a news ingestion platform that will collec
 
 ```
 /app
- ├── api/              # FastAPI application
- ├── workers/          # Worker framework
- ├── sources/          # Source implementations (future)
+ ├── api/              # FastAPI application with UI routes
+ │   └── routes/        # API endpoints (news, health, UI)
+ ├── workers/          # Worker framework and runner
+ ├── sources/          # Source-specific implementations
+ │   ├── isna.py       # ISNA RSS feed worker
+ │   ├── mehrnews.py   # MehrNews RSS feed worker
+ │   ├── irna.py       # IRNA RSS feed worker (with Playwright)
+ │   ├── fars.py       # Fars News Agency worker (with Playwright)
+ │   └── tasnim.py     # Tasnim News Agency worker
  ├── db/               # Database models and session
  ├── storage/          # S3 storage client
- ├── core/             # Configuration, logging, lifecycle
+ ├── core/             # Configuration, logging, category normalization
+ ├── templates/         # Jinja2 templates for UI
+ ├── static/           # CSS and static files
  └── main.py           # API entry point
 
 /docker
@@ -35,27 +43,71 @@ This is the foundational skeleton for a news ingestion platform that will collec
 ## Prerequisites
 
 - Docker and Docker Compose
+- External S3-compatible storage service (MinIO, AWS S3, etc.)
 - Python 3.11+ (for local development)
+- PostgreSQL (included in docker-compose or external)
 
 ## Quick Start
 
-1. **Start all services:**
+### Configuration
+
+1. **Create a `.env` file** (optional, defaults are provided):
+   ```env
+   # Database Configuration
+   DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/news_db
+
+   # S3/MinIO Configuration (External Service)
+   S3_ENDPOINT=http://your-minio-host:9000
+   S3_BUCKET=news-images
+   S3_ACCESS_KEY=your-access-key
+   S3_SECRET_KEY=your-secret-key
+   S3_REGION=us-east-1
+   S3_USE_SSL=false
+   S3_VERIFY_SSL=true
+
+   # Worker Configuration
+   POLL_INTERVAL=300
+   MAX_REQUESTS_PER_MINUTE=60
+   DELAY_BETWEEN_REQUESTS=1.0
+
+   # API Configuration
+   API_HOST=0.0.0.0
+   API_PORT=8000
+
+   # Logging
+   LOG_LEVEL=INFO
+   ```
+
+2. **Start all services:**
    ```bash
    docker-compose up -d
    ```
 
-2. **Test the application (PowerShell):**
-   ```powershell
-   .\test-app.ps1
-   ```
+   This will start:
+   - PostgreSQL database
+   - API service (port 8000)
+   - 5 worker services (one for each news source: ISNA, MehrNews, IRNA, Fars, Tasnim)
 
-3. **Or test manually:**
+3. **Access the web interface:**
+   - Open your browser: http://localhost:8000
+   - Browse news by source and category
+   - Search for news articles
+
+4. **Test the API:**
    ```bash
    # Check API health
    curl http://localhost:8000/health
    
-   # Test news endpoint
+   # Get latest news
    curl http://localhost:8000/news/latest
+   
+   # Get news by ID
+   curl http://localhost:8000/news/{id}
+   ```
+
+5. **Test the application (PowerShell):**
+   ```powershell
+   .\test-app.ps1
    ```
 
 4. **View logs:**
@@ -87,10 +139,13 @@ This is the foundational skeleton for a news ingestion platform that will collec
 
 ### API Service
 - **Port**: 8000
-- **Endpoints**:
+- **Web Interface**: http://localhost:8000
+- **API Endpoints**:
   - `GET /health` - Health check
-  - `GET /news/latest` - Latest news (returns empty list in Phase 1)
-  - `GET /news/{id}` - Get news by ID (not implemented in Phase 1)
+  - `GET /` - Web interface (news grid with filters)
+  - `GET /news/latest` - Latest news (JSON API)
+  - `GET /news/{id}` - Get news by ID (JSON API)
+  - `GET /news/{id}/details` - Get news details page (HTML)
 
 ### Worker Services
 - **5 separate worker services** (one for each news source):
@@ -130,8 +185,10 @@ All configuration is via environment variables:
 - `S3_VERIFY_SSL` - Verify SSL certificates (true/false, default: `true`)
 
 ### Worker
-- `WORKER_SOURCE` - Source name for this worker instance
+- `WORKER_SOURCE` - Source name for this worker instance (isna, mehrnews, irna, fars, tasnim)
 - `POLL_INTERVAL` - Polling interval in seconds (default: 300)
+- `MAX_REQUESTS_PER_MINUTE` - Rate limit per source (default: 60)
+- `DELAY_BETWEEN_REQUESTS` - Minimum delay between requests in seconds (default: 1.0)
 
 ### API
 - `API_HOST` - API host (default: 0.0.0.0)
@@ -150,15 +207,34 @@ All configuration is via environment variables:
 
 ### news
 - `id` (UUID, PK) - News ID
-- `source` - Source name
+- `source` - Source name (isna, mehrnews, irna, fars, tasnim)
 - `title` - News title
-- `body_html` - Full HTML content
+- `body_html` - Full HTML content with images
 - `summary` - News summary
-- `url` (unique) - News URL
-- `published_at` - Raw publication date string
+- `url` (unique) - News URL (used for deduplication)
+- `published_at` - Publication date/time (ISO format)
 - `created_at` - Creation timestamp
-- `image_url` - Image URL
-- `category` - News category
+- `image_url` - Main image URL (S3 path)
+- `category` - Normalized category (politics, economy, society, etc.)
+- `raw_category` - Original category from source
+
+## Running Specific Workers
+
+You can run only specific workers instead of all of them:
+
+```bash
+# Start only ISNA worker
+docker-compose up -d worker_isna
+
+# Start only Fars and Tasnim workers
+docker-compose up -d worker_fars worker_tasnim
+
+# Stop a specific worker
+docker-compose stop worker_isna
+
+# View logs for a specific worker
+docker-compose logs -f worker_fars
+```
 
 ## Development
 
@@ -177,7 +253,7 @@ A PowerShell script (`run-local.ps1`) is provided to simplify local development:
 .\run-local.ps1 -API
 
 # Run Worker only (with source name)
-.\run-local.ps1 -Worker -Source placeholder
+.\run-local.ps1 -Worker -Source isna
 
 # Stop running services
 .\run-local.ps1 -Stop
@@ -193,28 +269,36 @@ A PowerShell script (`run-local.ps1`) is provided to simplify local development:
    pip install -r requirements.txt
    ```
 
-2. **Create .env file:**
+2. **Install Playwright (required for IRNA and Fars workers):**
+   ```bash
+   playwright install chromium
+   ```
+
+3. **Create .env file:**
    ```env
    DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/news_db
-   S3_ENDPOINT=http://localhost:9000
+   S3_ENDPOINT=http://your-minio-host:9000
    S3_BUCKET=news-images
-   S3_ACCESS_KEY=minioadmin
-   S3_SECRET_KEY=minioadmin
+   S3_ACCESS_KEY=your-access-key
+   S3_SECRET_KEY=your-secret-key
    S3_REGION=us-east-1
    S3_USE_SSL=false
-   WORKER_SOURCE=placeholder
+   S3_VERIFY_SSL=true
+   WORKER_SOURCE=isna
    POLL_INTERVAL=300
+   MAX_REQUESTS_PER_MINUTE=60
+   DELAY_BETWEEN_REQUESTS=1.0
    API_HOST=0.0.0.0
    API_PORT=8000
    LOG_LEVEL=INFO
    ```
 
-3. **Run API:**
+4. **Run API:**
    ```bash
    python -m app.main
    ```
 
-4. **Run Worker (in separate terminal):**
+5. **Run Worker (in separate terminal):**
    ```bash
    python -m app.workers.runner
    ```
@@ -226,45 +310,50 @@ A PowerShell script (`run-local.ps1`) is provided to simplify local development:
   - Default: `localhost:5432`
   - Database: `news_db`
   - User: `postgres` / Password: `postgres`
-- **MinIO or S3-compatible storage** running locally or accessible
-  - Default: `localhost:9000`
-  - Or use AWS S3 (update `.env` accordingly)
+- **External S3-compatible storage** (MinIO, AWS S3, etc.)
+  - Configure via `.env` file
+- **Playwright** (for IRNA and Fars workers)
+  - Install: `pip install playwright && playwright install chromium`
 
-#### Quick Start with Docker Services
+## Features
 
-You can use Docker just for PostgreSQL and MinIO while running the app locally:
+### News Sources
 
-```powershell
-# Start only PostgreSQL and MinIO in Docker
-.\start-services.ps1
+- **ISNA** - RSS feed based scraping
+- **MehrNews** - RSS feed based scraping
+- **IRNA** - RSS feed + Playwright for JavaScript-rendered content
+- **Fars** - Playwright-based scraping from listing pages
+- **Tasnim** - Archive page scraping with selectolax
 
-# Run the app locally
-.\run-local.ps1 -Both
+### Category Normalization
 
-# Stop Docker services when done
-.\start-services.ps1 -Stop
-```
+All news sources have their categories normalized to a standard set:
+- `politics` - سیاسی
+- `economy` - اقتصادی
+- `society` - اجتماعی
+- `sports` - ورزشی
+- `culture` - فرهنگی
+- `international` - بین الملل
+- `technology` - فناوری
+- `science` - علم
+- `health` - سلامت
+- `provinces` - استانها
+- `other` - سایر
 
-This gives you the best of both worlds: Docker for infrastructure, local execution for development.
+### Image Handling
 
-## Phase 1 Limitations
+- Images are downloaded from source websites
+- Uploaded to S3-compatible storage
+- Presigned URLs generated for secure access
+- Duplicate images removed
+- CORS issues handled
 
-- No actual scraping logic
-- No RSS parsing
-- No HTML extraction
-- No database queries in API (returns empty lists)
-- Worker only runs placeholder loop
-- No image upload logic
+### Rate Limiting
 
-## Next Phases
-
-Future phases will add:
-- Source-specific worker implementations
-- RSS feed parsing
-- HTML content extraction
-- Database queries and CRUD operations
-- Image download and upload to S3
-- Error handling and retry logic
+- Per-source rate limiting
+- Configurable requests per minute
+- Exponential backoff on errors
+- Graceful error handling
 
 ## Testing
 

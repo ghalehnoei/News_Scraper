@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}{{ article.title }} - Newsroom{% endblock %}
+
+{% block content %}
+<div class="news-detail">
+    <div class="news-header">
+        <a href="/ui/news" class="back-link">← بازگشت به لیست اخبار</a>
+        <h1 class="news-title">{{ article.title }}</h1>
+        <div class="news-meta">
+            <span class="news-source">{{ article.source }}</span>
+            {% if article.published_at %}
+            <span class="news-date">{{ article.published_at|persian_date }}</span>
+            {% endif %}
+            {% if article.category %}
+            <span class="news-category">{{ article.category }}</span>
+            {% endif %}
+        </div>
+    </div>
+    
+    {% if article.image_url %}
+    <div class="news-image-large">
+        <img src="{{ article.image_url }}" alt="{{ article.title }}"
+             onerror="this.style.display='none';">
+    </div>
+    {% endif %}
+    
+    {% if article.summary %}
+    <div class="news-summary">
+        <p>{{ article.summary }}</p>
+    </div>
+    {% endif %}
+    
+    {% if article.body_html %}
+    <div class="news-body">
+        {{ article.body_html|safe }}
+    </div>
+    {% endif %}
+    
+    <div class="news-footer-detail">
+        <a href="{{ article.url }}" target="_blank" rel="noopener noreferrer" class="original-link">
+            مشاهده خبر اصلی →
+        </a>
+    </div>
+</div>
+{% endblock %}
+

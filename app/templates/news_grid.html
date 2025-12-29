@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block title %}آخرین اخبار - Newsroom{% endblock %}
+
+{% block content %}
+<div class="news-layout">
+    <aside class="sources-sidebar">
+        <div class="sidebar-section">
+            <h2>منابع خبری</h2>
+            <ul class="sources-list">
+                <li>
+                    <a href="/ui/news{% if current_category or current_query %}?{% endif %}{% if current_category %}category={{ current_category }}{% endif %}{% if current_category and current_query %}&{% endif %}{% if current_query %}q={{ current_query }}{% endif %}" 
+                       class="{% if not current_source or current_source == '' %}active{% endif %}">
+                        همه منابع
+                    </a>
+                </li>
+                {% for source_item in sources %}
+                <li>
+                    <a href="/ui/news?source={{ source_item.key }}{% if current_category %}&category={{ current_category }}{% endif %}{% if current_query %}&q={{ current_query }}{% endif %}" 
+                       class="{% if current_source and current_source|string == source_item.key|string %}active{% endif %}">
+                        {{ source_item.name }}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        
+        <div class="sidebar-section">
+            <h2>دسته‌بندی‌ها</h2>
+            <ul class="sources-list">
+                <li>
+                    <a href="/ui/news{% if current_source or current_query %}?{% endif %}{% if current_source %}source={{ current_source }}{% endif %}{% if current_source and current_query %}&{% endif %}{% if current_query %}q={{ current_query }}{% endif %}" 
+                       class="{% if not current_category %}active{% endif %}">
+                        همه دسته‌بندی‌ها
+                    </a>
+                </li>
+                {% for cat_item in categories %}
+                <li>
+                    <a href="/ui/news?category={{ cat_item.key }}{% if current_source %}&source={{ current_source }}{% endif %}{% if current_query %}&q={{ current_query }}{% endif %}" 
+                       class="{% if current_category == cat_item.key %}active{% endif %}">
+                        {{ cat_item.name }}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </aside>
+    
+    <div class="news-content-area">
+        {% if search_error %}
+        <div class="search-error">
+            <p>{{ search_error }}</p>
+        </div>
+        {% endif %}
+        <div class="news-grid">
+            {% if articles %}
+                {% for article in articles %}
+        <article class="news-card" data-news-id="{{ article.id }}" onclick="openNewsModal('{{ article.id }}')">
+            <a href="javascript:void(0);">
+                {% if article.image_url %}
+                <div class="news-image">
+                    <img src="{{ article.image_url }}" alt="{{ article.title }}" 
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div class="image-placeholder" style="display: none;">
+                        <span>بدون تصویر</span>
+                    </div>
+                    <span class="source-badge" style="background-color: {{ article.source_color }};">
+                        {{ article.source_persian }}
+                    </span>
+                </div>
+                {% else %}
+                <div class="news-image">
+                    <div class="image-placeholder">
+                        <span>بدون تصویر</span>
+                    </div>
+                    <span class="source-badge" style="background-color: {{ article.source_color }};">
+                        {{ article.source_persian }}
+                    </span>
+                </div>
+                {% endif %}
+                
+                <div class="news-content">
+                    <h2 class="news-title">{{ article.title }}</h2>
+                </div>
+                
+                <div class="news-footer">
+                    <div class="news-footer-left">
+                        {% if article.raw_category %}
+                        <span class="news-category">{{ article.raw_category }}</span>
+                        {% elif article.category_persian %}
+                        <span class="news-category">{{ article.category_persian }}</span>
+                        {% endif %}
+                    </div>
+                    {% if article.published_at %}
+                    <span class="news-date">{{ article.published_at|persian_date }}</span>
+                    {% endif %}
+                </div>
+            </a>
+        </article>
+        {% endfor %}
+            {% else %}
+                <div class="no-news">
+                    <p>{% if current_query %}نتیجه‌ای برای "{{ current_query }}" یافت نشد.{% else %}هیچ خبری یافت نشد.{% endif %}</p>
+                </div>
+            {% endif %}
+        </div>
+        
+        {% if pagination.has_more %}
+        <div class="pagination-controls">
+            <a href="/ui/news?limit={{ pagination.limit }}&offset={{ pagination.offset + pagination.limit }}{% if current_source %}&source={{ current_source }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if current_query %}&q={{ current_query }}{% endif %}" 
+               class="load-more-btn">
+                نمایش بیشتر
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- News Modal -->
+<div id="newsModal" class="modal">
+    <div class="modal-overlay" onclick="closeNewsModal()"></div>
+    <div class="modal-content">
+        <button class="modal-close" onclick="closeNewsModal()">&times;</button>
+        <div id="modalBody" class="modal-body">
+            <div class="modal-loading">در حال بارگذاری...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function openNewsModal(newsId) {
+    const modal = document.getElementById('newsModal');
+    const modalBody = document.getElementById('modalBody');
+    
+    // Show modal
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    
+    // Show loading
+    modalBody.innerHTML = '<div class="modal-loading">در حال بارگذاری...</div>';
+    
+    try {
+        // Fetch news details
+        const response = await fetch(`/news/${newsId}`);
+        if (!response.ok) {
+            throw new Error('خطا در دریافت خبر');
+        }
+        
+        const article = await response.json();
+        
+        // Highlight search words in title and summary
+        let highlightedTitle = escapeHtml(article.title);
+        let highlightedSummary = article.summary ? escapeHtml(article.summary) : '';
+        let highlightedBody = article.body_html || '';
+        
+        if (searchWords && searchWords.length > 0) {
+            highlightedTitle = highlightText(highlightedTitle, searchWords);
+            if (highlightedSummary) {
+                highlightedSummary = highlightText(highlightedSummary, searchWords);
+            }
+            if (highlightedBody) {
+                highlightedBody = highlightInHTML(highlightedBody, searchWords);
+            }
+        }
+        
+        // Render article content
+        modalBody.innerHTML = `
+            <div class="modal-news-header">
+                <h1 class="modal-news-title">${highlightedTitle}</h1>
+                <div class="modal-news-meta">
+                    <span class="news-source">${escapeHtml(article.source_persian || article.source)}</span>
+                    ${article.published_at ? `<span class="news-date">${formatPersianDate(article.published_at)}</span>` : ''}
+                    ${article.raw_category ? `<span class="news-category">${escapeHtml(article.raw_category)}</span>` : (article.category ? `<span class="news-category">${escapeHtml(article.category)}</span>` : '')}
+                </div>
+            </div>
+            ${highlightedSummary ? `
+                <div class="modal-news-summary">
+                    <p>${highlightedSummary}</p>
+                </div>
+            ` : ''}
+            ${highlightedBody ? `
+                <div class="modal-news-body">
+                    ${highlightedBody}
+                </div>
+            ` : ''}
+            <div class="modal-news-footer">
+                <a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer" class="original-link">
+                    مشاهده خبر اصلی →
+                </a>
+            </div>
+        `;
+    } catch (error) {
+        modalBody.innerHTML = `
+            <div class="modal-error">
+                <p>خطا در بارگذاری خبر: ${escapeHtml(error.message)}</p>
+            </div>
+        `;
+    }
+}
+
+function closeNewsModal() {
+    const modal = document.getElementById('newsModal');
+    modal.style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatPersianDate(dateStr) {
+    if (!dateStr) return '';
+    // Date is already converted to Persian by the server, just return as is
+    return String(dateStr);
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeNewsModal();
+    }
+});
+
+// Highlight search words utility
+const searchWords = {{ search_words|tojson }};
+
+function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function highlightText(text, words) {
+    if (!text || !words || words.length === 0) return text;
+    
+    let highlighted = text;
+    words.forEach(word => {
+        if (word.length < 2) return;
+        const escapedWord = escapeRegex(word);
+        const regex = new RegExp(`(${escapedWord})`, 'gi');
+        highlighted = highlighted.replace(regex, '<mark class="search-highlight">$1</mark>');
+    });
+    
+    return highlighted;
+}
+
+function highlightInHTML(htmlString, words) {
+    if (!htmlString || !words || words.length === 0) return htmlString;
+    
+    // Create a temporary container to parse HTML
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlString;
+    
+    // Function to recursively highlight text nodes
+    function highlightNode(node, words) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent;
+            const highlighted = highlightText(text, words);
+            if (highlighted !== text) {
+                const wrapper = document.createElement('span');
+                wrapper.innerHTML = highlighted;
+                while (wrapper.firstChild) {
+                    node.parentNode.insertBefore(wrapper.firstChild, node);
+                }
+                node.parentNode.removeChild(node);
+            }
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+            // Skip script and style tags
+            if (node.tagName === 'SCRIPT' || node.tagName === 'STYLE') {
+                return;
+            }
+            // Recursively process child nodes
+            const children = Array.from(node.childNodes);
+            children.forEach(child => highlightNode(child, words));
+        }
+    }
+    
+    // Highlight all text nodes
+    const allNodes = Array.from(tempDiv.childNodes);
+    allNodes.forEach(node => highlightNode(node, words));
+    
+    return tempDiv.innerHTML;
+}
+
+// Highlight in news titles on page load
+if (searchWords && searchWords.length > 0) {
+    document.querySelectorAll('.news-title').forEach(titleEl => {
+        const originalText = titleEl.textContent;
+        const highlighted = highlightText(originalText, searchWords);
+        if (highlighted !== originalText) {
+            titleEl.innerHTML = highlighted;
+        }
+    });
+}
+</script>
+{% endblock %}
+

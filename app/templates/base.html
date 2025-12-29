@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}خبرخوان{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/rastikerdar/vazir-font@v30.1.0/dist/font-face.css">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1><a href="/ui/news" style="color: inherit; text-decoration: none;">خبرخوان</a></h1>
+            <div class="header-search">
+                <form class="search-form" action="/ui/news" method="get">
+                    <input type="text" name="q" class="search-input" placeholder="جستجوی خبر..." minlength="2" id="header-search-input">
+                    <button type="submit" class="search-button">جستجو</button>
+                    <a href="/ui/news" class="search-clear" id="search-clear-btn" style="display: none;">×</a>
+                </form>
+            </div>
+        </div>
+    </header>
+    <script>
+        // Set search input value from URL query parameter and show/hide clear button
+        (function() {
+            function updateSearchInput() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const q = urlParams.get('q');
+                const searchInput = document.getElementById('header-search-input');
+                const clearBtn = document.getElementById('search-clear-btn');
+                
+                if (searchInput) {
+                    if (q) {
+                        searchInput.value = decodeURIComponent(q);
+                        if (clearBtn) {
+                            clearBtn.style.display = 'flex';
+                        }
+                    } else {
+                        searchInput.value = '';
+                        if (clearBtn) {
+                            clearBtn.style.display = 'none';
+                        }
+                    }
+                }
+            }
+            
+            // Update on page load
+            updateSearchInput();
+            
+            // Update on popstate (back/forward button)
+            window.addEventListener('popstate', updateSearchInput);
+            
+            // Handle clear button click
+            const clearBtn = document.getElementById('search-clear-btn');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    window.location.href = '/ui/news';
+                });
+            }
+            
+            // Update clear button visibility on input change
+            const searchInput = document.getElementById('header-search-input');
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    const clearBtn = document.getElementById('search-clear-btn');
+                    if (clearBtn) {
+                        clearBtn.style.display = this.value ? 'flex' : 'none';
+                    }
+                });
+            }
+        })();
+    </script>
+    
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    
+    <footer>
+        <div class="container">
+            <p>پلتفرم گردآوری اخبار فارسی - News Ingestion Platform</p>
+        </div>
+    </footer>
+</body>
+</html>
+

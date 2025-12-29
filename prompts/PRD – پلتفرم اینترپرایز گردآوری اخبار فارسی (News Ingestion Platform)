@@ -1,0 +1,206 @@
+# PRD – پلتفرم اینترپرایز گردآوری اخبار فارسی
+
+## 1. هدف محصول (Product Vision)
+
+ایجاد یک پلتفرم پایدار، مقیاس‌پذیر و قابل توسعه برای **گردآوری مداوم اخبار از خبرگزاری‌های فارسی** و ارائه خروجی استاندارد به **Newsroom** از طریق API.
+
+این پلتفرم در فاز فعلی **هیچ‌گونه پردازش محتوایی (NLP / تحلیل / Dedup محتوایی)** انجام نمی‌دهد و صرفاً مسئول **Ingestion قابل اتکا** است.
+
+---
+
+## 2. اهداف اصلی (Goals)
+
+* دریافت اخبار از منابع مختلف فارسی
+* اجرای مستقل هر خبرگزاری
+* امکان Scale افقی با Workerهای جداگانه
+* ذخیره ساخت‌یافته اخبار در دیتابیس
+* ذخیره تصاویر در Object Storage (S3)
+* ارائه API خواندنی برای Newsroom و ابزارهایی مثل n8n
+
+---
+
+## 3. خارج از محدوده (Out of Scope – فعلاً)
+
+* تحلیل محتوا
+* پردازش زبان طبیعی
+* تشخیص خبر تکراری بین خبرگزاری‌ها
+* ترجمه
+* امتیازدهی یا اولویت‌بندی اخبار
+
+---
+
+## 4. معماری کلان (High-Level Architecture)
+
+```
+┌────────────┐        ┌──────────────┐
+│ Continuous │        │ Continuous   │
+│ Worker     │        │ Worker       │
+│ (Mehr)    │        │ (Fars)       │
+└─────┬──────┘        └─────┬────────┘
+      │                     │
+      ├────────────┬────────┤
+                   ▼
+             ┌──────────────┐
+             │ PostgreSQL   │
+             │ News DB      │
+             └─────┬────────┘
+                   │
+             ┌─────▼────────┐
+             │ FastAPI      │
+             │ Read API     │
+             └──────────────┘
+                   ▲
+        ┌──────────┴──────────┐
+        │   S3 Object Storage  │
+        │   (Images)          │
+        └─────────────────────┘
+```
+
+---
+
+## 5. مدل اجرایی (Execution Model)
+
+### 5.1 Workerها
+
+* هر Worker دقیقاً به **یک خبرگزاری** اختصاص دارد
+* Worker به‌صورت **دائمی (daemon)** اجرا می‌شود
+* Worker به‌صورت دوره‌ای (Polling) منبع خود را بررسی می‌کند
+* Workerها مستقل از یکدیگر هستند
+
+### 5.2 منابع خبری (Initial Sources)
+
+* Mehr News (RSS)
+* Tasnim News (RSS)
+* ISNA (RSS)
+* IRNA (RSS)
+* Fars News (HTML Listing – showcase page)
+
+---
+
+## 6. رفتار Worker
+
+* دریافت لیست اخبار جدید
+* تشخیص جدید بودن خبر بر اساس URL / ID
+* استخراج:
+
+  * عنوان
+  * متن کامل (HTML)
+  * خلاصه
+  * تاریخ انتشار (Raw)
+  * دسته‌بندی
+  * تصویر اصلی
+* ذخیره خبر در دیتابیس
+* آپلود تصویر در S3
+* ذخیره مسیر تصویر در دیتابیس
+
+---
+
+## 7. دیتابیس (Database Requirements)
+
+### جدول news
+
+* id (UUID, PK)
+* source (string)
+* title (string)
+* body_html (text)
+* summary (text)
+* url (string, unique)
+* published_at (string)
+* created_at (timestamp)
+* image_url (string)
+* category (string)
+
+### جدول news_sources
+
+* name (string, PK)
+* interval_minutes (int)
+* last_run_at (timestamp)
+* enabled (boolean)
+
+---
+
+## 8. ذخیره‌سازی تصاویر (Image Storage)
+
+* استفاده از S3-compatible storage (MinIO / AWS S3)
+* عدم ذخیره تصویر روی دیسک محلی
+* ساختار مسیر:
+
+```
+news-images/{source}/{yyyy}/{mm}/{dd}/{filename}
+```
+
+---
+
+## 9. API (Read-Only)
+
+### GET /news/latest
+
+Query Params:
+
+* source (optional)
+* limit (default=20)
+
+Response:
+
+* لیست آخرین اخبار
+
+### GET /news/{id}
+
+* دریافت خبر کامل
+
+### GET /health
+
+* وضعیت سرویس
+
+---
+
+## 10. تنظیمات (Configuration)
+
+* WORKER_SOURCE (env)
+* DATABASE_URL
+* S3_ENDPOINT
+* S3_BUCKET
+* S3_ACCESS_KEY
+* S3_SECRET_KEY
+* POLL_INTERVAL
+
+---
+
+## 11. الزامات غیرعملکردی (Non-Functional Requirements)
+
+* مقیاس‌پذیری افقی
+* تحمل خطا (Fault Tolerance)
+* لاگ ساخت‌یافته
+* عدم وابستگی Workerها به API
+* عدم وابستگی API به Scraper
+
+---
+
+## 12. استقرار (Deployment)
+
+* Docker-first
+* docker-compose برای محیط توسعه
+* آماده برای Kubernetes در آینده
+
+---
+
+## 13. مسیر توسعه آینده (Future Roadmap)
+
+* Dedup محتوایی بین منابع
+* پردازش NLP
+* Tagging و Topic Detection
+* Search API
+* Editorial Flags
+
+---
+
+## 14. معیار موفقیت (Success Criteria)
+
+* هر خبرگزاری بدون تأثیر بر دیگری اجرا شود
+* اضافه‌کردن خبرگزاری جدید بدون تغییر Core
+* Newsroom بتواند فقط از API استفاده کند
+* سیستم حداقل 24/7 پایدار اجرا شود
+
+---
+
+**این PRD مبنای توسعه با Cursor است و Cursor باید دقیقاً مطابق آن کد تولید کند.**

@@ -9,9 +9,9 @@ This is the foundational skeleton for a news ingestion platform that will collec
 ## Architecture
 
 - **API Service**: FastAPI-based read-only API
-- **Worker Service**: Base worker framework for future source-specific workers
+- **Worker Services**: Separate workers for each news source (ISNA, MehrNews, IRNA, Fars, Tasnim)
 - **Database**: PostgreSQL with SQLAlchemy async ORM
-- **Storage**: S3-compatible storage (MinIO) for images
+- **Storage**: External S3-compatible storage (MinIO) for images
 - **Configuration**: Environment-based configuration
 - **Logging**: Structured logging with source awareness
 
@@ -61,7 +61,11 @@ This is the foundational skeleton for a news ingestion platform that will collec
 4. **View logs:**
    ```bash
    docker-compose logs -f api
-   docker-compose logs -f worker
+   docker-compose logs -f worker_isna
+   docker-compose logs -f worker_mehrnews
+   docker-compose logs -f worker_irna
+   docker-compose logs -f worker_fars
+   docker-compose logs -f worker_tasnim
    ```
    
    Or use the test script:
@@ -88,9 +92,14 @@ This is the foundational skeleton for a news ingestion platform that will collec
   - `GET /news/latest` - Latest news (returns empty list in Phase 1)
   - `GET /news/{id}` - Get news by ID (not implemented in Phase 1)
 
-### Worker Service
-- Runs continuously, polling at configured intervals
-- Reads `WORKER_SOURCE` from environment
+### Worker Services
+- **5 separate worker services** (one for each news source):
+  - `worker_isna` - ISNA news source
+  - `worker_mehrnews` - MehrNews source
+  - `worker_irna` - IRNA source
+  - `worker_fars` - Fars News Agency
+  - `worker_tasnim` - Tasnim News Agency
+- Each worker runs continuously, polling at configured intervals
 - Graceful shutdown on SIGTERM/SIGINT
 
 ### Database
@@ -100,10 +109,9 @@ This is the foundational skeleton for a news ingestion platform that will collec
 - **User**: postgres / postgres
 
 ### Storage
-- **MinIO** (S3-compatible)
-- **Port**: 9000 (API), 9001 (Console)
-- **Credentials**: minioadmin / minioadmin
-- **Bucket**: news-images
+- **External S3-compatible storage** (MinIO, AWS S3, or other S3-compatible services)
+- Configure via environment variables (see Configuration section)
+- **Note**: MinIO is no longer included in docker-compose. Use an external service.
 
 ## Configuration
 
@@ -112,13 +120,14 @@ All configuration is via environment variables:
 ### Database
 - `DATABASE_URL` - PostgreSQL connection string
 
-### S3 Storage
-- `S3_ENDPOINT` - S3 endpoint URL
-- `S3_BUCKET` - Bucket name
-- `S3_ACCESS_KEY` - Access key
-- `S3_SECRET_KEY` - Secret key
-- `S3_REGION` - AWS region
-- `S3_USE_SSL` - Use SSL (true/false)
+### S3 Storage (External Service)
+- `S3_ENDPOINT` - S3 endpoint URL (e.g., `http://your-minio-host:9000`)
+- `S3_BUCKET` - Bucket name (default: `news-images`)
+- `S3_ACCESS_KEY` - Access key for your external MinIO/S3 service
+- `S3_SECRET_KEY` - Secret key for your external MinIO/S3 service
+- `S3_REGION` - AWS region (default: `us-east-1`)
+- `S3_USE_SSL` - Use SSL (true/false, default: `false`)
+- `S3_VERIFY_SSL` - Verify SSL certificates (true/false, default: `true`)
 
 ### Worker
 - `WORKER_SOURCE` - Source name for this worker instance

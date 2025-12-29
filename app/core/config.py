@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # API
     api_host: str = "0.0.0.0"
-    api_port: int = 8000
+    api_port: int = 3000
 
     # Logging
     log_level: str = "INFO"
@@ -38,6 +38,7 @@ class Settings(BaseSettings):
         case_sensitive=False,
         env_file=".env",
         env_file_encoding="utf-8",
+        extra="ignore",  # Ignore extra fields from .env that are not in the model
     )
 
 

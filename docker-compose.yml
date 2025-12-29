@@ -61,7 +61,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-    worker-tasnim:
+  worker-tasnim:
     image: ghcr.io/ghalehnoei/news-scraper/worker:latest
     environment:
       WORKER_SOURCE: tasnim

@@ -124,7 +124,22 @@ async def generate_presigned_url(s3_path: str, expiration: int = 3600) -> Option
         bucket = settings.s3_bucket
         
         # Extract S3 key from path or URL
-        if s3_path.startswith("http"):
+        if s3_path.startswith("s3://"):
+            # Parse s3://bucket/path format
+            # Remove "s3://" prefix
+            path_after_s3 = s3_path[5:]  # Remove "s3://"
+            # Split bucket and key
+            parts = path_after_s3.split("/", 1)
+            if len(parts) == 2:
+                path_bucket, key = parts
+                # Use the path after bucket as key (regardless of bucket name)
+                key = key
+                logger.debug(f"Extracted S3 key from s3:// URL: {key} (bucket: {path_bucket})")
+            else:
+                # No path after bucket, this is invalid but use as-is
+                key = path_after_s3
+                logger.warning(f"Invalid s3:// URL format (no path after bucket): {s3_path}")
+        elif s3_path.startswith("http"):
             # Full URL format: extract the key (path after bucket)
             from urllib.parse import urlparse
             parsed = urlparse(s3_path)

@@ -301,6 +301,65 @@ CATEGORY_MAPPINGS = {
         "استان‌ها": "provinces",
         "استان ها": "provinces",
     },
+    "iribnews": {
+        # Politics
+        "سیاسی": "politics",
+        "سیاست": "politics",
+        "سیاست داخلی": "politics",
+        "سیاست خارجی": "politics",
+        "داخلی": "politics",
+        # Economy
+        "اقتصادی": "economy",
+        "اقتصاد": "economy",
+        "بازار": "economy",
+        "بورس": "economy",
+        # Society
+        "اجتماعی": "society",
+        "جامعه": "society",
+        "حوادث": "society",
+        "قضایی": "society",
+        # International
+        "بین‌الملل": "international",
+        "بین الملل": "international",
+        "جهان": "international",
+        "خارجی": "international",
+        # Culture
+        "فرهنگی": "culture",
+        "فرهنگ": "culture",
+        "هنر": "culture",
+        "سینما": "culture",
+        # Sports
+        "ورزشی": "sports",
+        "ورزش": "sports",
+        "فوتبال": "sports",
+        # Science
+        "علمی": "science",
+        "علم": "science",
+        "پزشکی": "health",
+        "سلامت": "health",
+        # Technology
+        "فناوری": "technology",
+        "تکنولوژی": "technology",
+        "فناوری اطلاعات": "technology",
+        # Provinces
+        "استانها": "provinces",
+        "استان‌ها": "provinces",
+        "استان ها": "provinces",
+        "مازندران": "provinces",
+        "تهران": "provinces",
+        "اصفهان": "provinces",
+        "فارس": "provinces",
+        "خراسان": "provinces",
+        "آذربایجان": "provinces",
+        "گیلان": "provinces",
+        "خوزستان": "provinces",
+        "کرمان": "provinces",
+        "آذربایجان شرقی": "provinces",
+        "آذربایجان غربی": "provinces",
+        "خراسان رضوی": "provinces",
+        "خراسان شمالی": "provinces",
+        "خراسان جنوبی": "provinces",
+    },
 }
 
 

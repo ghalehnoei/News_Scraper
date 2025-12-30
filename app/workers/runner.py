@@ -15,6 +15,7 @@ from app.sources.mehrnews import MehrNewsWorker
 from app.sources.irna import IRNAWorker
 from app.sources.fars import FarsWorker
 from app.sources.tasnim import TasnimWorker
+from app.sources.iribnews import IRIBNewsWorker
 
 
 async def main() -> None:
@@ -37,6 +38,8 @@ async def main() -> None:
         worker = FarsWorker()
     elif settings.worker_source == "tasnim":
         worker = TasnimWorker()
+    elif settings.worker_source == "iribnews":
+        worker = IRIBNewsWorker()
     else:
         # Fallback to base worker for unknown sources
         worker = BaseWorker(settings.worker_source)

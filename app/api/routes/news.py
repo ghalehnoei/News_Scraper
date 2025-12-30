@@ -27,6 +27,7 @@ SOURCE_NAMES = {
     "irna": "خبرگزاری ایرنا",
     "tasnim": "خبرگزاری تسنیم",
     "fars": "خبرگزاری فارس",
+    "iribnews": "خبرگزاری صداوسیما",
 }
 
 
@@ -188,7 +189,25 @@ async def get_news_by_id(
     if image_url:
         try:
             # Extract S3 key from URL
-            if image_url.startswith(settings.s3_endpoint):
+            # Stored format can be:
+            # 1. s3://bucket/path (e.g., s3://output/news-images/iribnews/2025/12/30/abc123.jpg)
+            # 2. {endpoint}/{bucket}/{key} (e.g., https://gpmedia.iribnews.ir/output/news-images/...)
+            # 3. Just the key (e.g., news-images/iribnews/2025/12/30/abc123.jpg)
+            if image_url.startswith("s3://"):
+                # Parse s3://bucket/path format
+                # Remove "s3://" prefix
+                path_after_s3 = image_url[5:]  # Remove "s3://"
+                # Split bucket and key
+                parts = path_after_s3.split("/", 1)
+                if len(parts) == 2:
+                    path_bucket, s3_key = parts
+                    # Use the path after bucket as key (regardless of bucket name)
+                    s3_key = s3_key
+                else:
+                    # No path after bucket, this shouldn't happen but use as-is
+                    s3_key = path_after_s3
+                logger.debug(f"Extracted S3 key from s3:// URL: {s3_key}")
+            elif image_url.startswith(settings.s3_endpoint):
                 prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}/"
                 if image_url.startswith(prefix):
                     s3_key = image_url[len(prefix):]

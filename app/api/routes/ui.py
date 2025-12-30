@@ -29,6 +29,7 @@ SOURCE_NAMES = {
     "irna": "خبرگزاری ایرنا",
     "tasnim": "خبرگزاری تسنیم",
     "fars": "خبرگزاری فارس",
+    "iribnews": "خبرگزاری صداوسیما",
 }
 
 # Color codes for sources
@@ -38,6 +39,7 @@ SOURCE_COLORS = {
     "irna": "#2ecc71",      # سبز
     "tasnim": "#f39c12",    # نارنجی
     "fars": "#9b59b6",      # بنفش
+    "iribnews": "#16a085",  # فیروزه‌ای
 }
 
 # Persian names for normalized categories
@@ -228,9 +230,25 @@ async def news_grid(
         if image_url:
             try:
                 # Extract S3 key from URL
-                # Stored format: {endpoint}/{bucket}/{key}
-                # Example: https://gpmedia.iribnews.ir/output/news-images/mehrnews/2025/12/27/abc123.jpg
-                if image_url.startswith(settings.s3_endpoint):
+                # Stored format can be:
+                # 1. s3://bucket/path (e.g., s3://output/news-images/iribnews/2025/12/30/abc123.jpg)
+                # 2. {endpoint}/{bucket}/{key} (e.g., https://gpmedia.iribnews.ir/output/news-images/...)
+                # 3. Just the key (e.g., news-images/iribnews/2025/12/30/abc123.jpg)
+                if image_url.startswith("s3://"):
+                    # Parse s3://bucket/path format
+                    # Remove "s3://" prefix
+                    path_after_s3 = image_url[5:]  # Remove "s3://"
+                    # Split bucket and key
+                    parts = path_after_s3.split("/", 1)
+                    if len(parts) == 2:
+                        path_bucket, s3_key = parts
+                        # Use the path after bucket as key (regardless of bucket name)
+                        s3_key = s3_key
+                    else:
+                        # No path after bucket, this shouldn't happen but use as-is
+                        s3_key = path_after_s3
+                    logger.debug(f"Extracted S3 key from s3:// URL: {s3_key}")
+                elif image_url.startswith(settings.s3_endpoint):
                     # Remove endpoint and bucket to get the key
                     prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}/"
                     if image_url.startswith(prefix):

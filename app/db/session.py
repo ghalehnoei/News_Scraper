@@ -1,5 +1,6 @@
 """Database session management."""
 
+import asyncio
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,10 +30,26 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    """Initialize database connection and create tables."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database tables created/verified")
+    """Initialize database connection and create tables with retry logic."""
+    max_retries = 10
+    retry_delay = 2  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("Database tables created/verified")
+            return
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logger.warning(
+                    f"Database connection attempt {attempt + 1}/{max_retries} failed: {e}. "
+                    f"Retrying in {retry_delay} seconds..."
+                )
+                await asyncio.sleep(retry_delay)
+            else:
+                logger.error(f"Failed to connect to database after {max_retries} attempts: {e}")
+                raise
 
 
 async def close_db() -> None:

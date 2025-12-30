@@ -7,6 +7,7 @@ from typing import Optional
 
 from app.core.config import settings
 from app.core.logging import setup_logging
+from app.db.session import init_db
 
 logger = setup_logging()
 
@@ -51,6 +52,15 @@ class BaseWorker:
         Handles graceful shutdown on SIGTERM/SIGINT.
         """
         self.logger.info(f"Starting worker for source: {self.source_name}")
+        
+        # Initialize database and create tables if they don't exist
+        try:
+            await init_db()
+            self.logger.info("Database tables initialized/verified")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize database: {e}", exc_info=True)
+            raise
+        
         self.running = True
 
         # Setup signal handlers for graceful shutdown (Unix only)

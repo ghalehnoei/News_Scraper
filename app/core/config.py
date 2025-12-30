@@ -1,7 +1,14 @@
 """Configuration management for the application."""
 
+import os
 from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# Determine if we should use .env file (only for local development)
+# In Docker, USE_ENV_FILE should be False or not set, so it uses environment variables
+_use_env_file = os.getenv("USE_ENV_FILE", "false").lower() == "true"
+_env_file_path = ".env" if _use_env_file and os.path.exists(".env") else None
 
 
 class Settings(BaseSettings):
@@ -36,7 +43,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         case_sensitive=False,
-        env_file=".env",
+        env_file=_env_file_path,  # Only use .env file if USE_ENV_FILE=true and file exists
         env_file_encoding="utf-8",
         extra="ignore",  # Ignore extra fields from .env that are not in the model
     )

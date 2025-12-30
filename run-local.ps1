@@ -176,6 +176,9 @@ function Start-API {
         }
     }
     
+    # Enable .env file usage for local development
+    [Environment]::SetEnvironmentVariable("USE_ENV_FILE", "true", "Process")
+    
     Write-Info "Starting API on http://localhost:8000"
     Write-Info "Press Ctrl+C to stop"
     
@@ -205,6 +208,9 @@ function Start-Worker {
             }
         }
     }
+    
+    # Enable .env file usage for local development
+    [Environment]::SetEnvironmentVariable("USE_ENV_FILE", "true", "Process")
     
     # Set worker source
     if ($SourceName) {
@@ -248,8 +254,11 @@ function Start-Both {
         }
     }
     
+    # Enable .env file usage for local development
+    [Environment]::SetEnvironmentVariable("USE_ENV_FILE", "true", "Process")
+    
     # Set worker source if provided
-    if ($SourceName) {
+    if ($SourceName -and $SourceName -ne "placeholder") {
         [Environment]::SetEnvironmentVariable("WORKER_SOURCE", $SourceName, "Process")
     }
     
@@ -257,16 +266,24 @@ function Start-Both {
     Write-Info "API will run in this window"
     Write-Info "Worker will run in a new window"
     
-    # Start worker in new window
-    $workerSourceEnv = [Environment]::GetEnvironmentVariable("WORKER_SOURCE", "Process")
-    if (-not $workerSourceEnv) {
-        $workerSourceEnv = $SourceName
+    # Determine worker source: prioritize parameter, then environment variable
+    $workerSourceEnv = $SourceName
+    if (-not $workerSourceEnv -or $workerSourceEnv -eq "placeholder") {
+        $workerSourceEnv = [Environment]::GetEnvironmentVariable("WORKER_SOURCE", "Process")
     }
+    
+    if (-not $workerSourceEnv -or $workerSourceEnv -eq "placeholder") {
+        Write-Error "WORKER_SOURCE is required. Please provide -Source parameter or set it in .env file"
+        Write-Info "Example: .\run-local.ps1 -Both -Source tasnim"
+        exit 1
+    }
+    
+    Write-Info "Worker source: $workerSourceEnv"
     
     $workerScript = @"
 cd '$PWD'
 venv\Scripts\Activate.ps1
-`$env:WORKER_SOURCE='$workerSourceEnv'
+`$env:USE_ENV_FILE='true'
 if (Test-Path '.env') {
     Get-Content '.env' | ForEach-Object {
         if (`$_ -match '^\s*([^#][^=]+)=(.*)$') {
@@ -276,6 +293,9 @@ if (Test-Path '.env') {
         }
     }
 }
+# Set WORKER_SOURCE after loading .env to override any value from .env
+`$env:WORKER_SOURCE='$workerSourceEnv'
+[Environment]::SetEnvironmentVariable('WORKER_SOURCE', '$workerSourceEnv', 'Process')
 Write-Host 'Starting Worker for source: ' -NoNewline
 Write-Host '$workerSourceEnv' -ForegroundColor Green
 python -m app.workers.runner
@@ -366,8 +386,23 @@ if ($API) {
 } elseif ($Worker) {
     Start-Worker -SourceName $Source
 } elseif ($Both) {
+    # Only use placeholder if Source was not explicitly provided
     if (-not $Source -or $Source -eq "placeholder") {
-        $Source = "placeholder"
+        # Check if WORKER_SOURCE is set in .env
+        if (Test-Path ".env") {
+            $envContent = Get-Content ".env"
+            foreach ($line in $envContent) {
+                if ($line -match '^\s*WORKER_SOURCE\s*=\s*(.+)$') {
+                    $Source = $matches[1].Trim()
+                    break
+                }
+            }
+        }
+        if (-not $Source -or $Source -eq "placeholder") {
+            Write-Warning "WORKER_SOURCE not specified. Please use -Source parameter or set it in .env file"
+            Write-Info "Example: .\run-local.ps1 -Both -Source tasnim"
+            exit 1
+        }
     }
     Start-Both -SourceName $Source
 } else {

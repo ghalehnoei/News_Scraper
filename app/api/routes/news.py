@@ -28,6 +28,7 @@ SOURCE_NAMES = {
     "tasnim": "خبرگزاری تسنیم",
     "fars": "خبرگزاری فارس",
     "iribnews": "خبرگزاری صداوسیما",
+    "ilna": "ایلنا",
 }
 
 
@@ -48,6 +49,7 @@ class PaginatedNewsResponse(BaseModel):
 @router.get("/latest", response_model=PaginatedNewsResponse)
 async def get_latest_news(
     source: Optional[str] = Query(None, description="Filter by source name"),
+    category: Optional[str] = Query(None, description="Filter by category"),
     q: Optional[str] = Query(None, description="Search keyword"),
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Number of items to skip"),
@@ -109,6 +111,11 @@ async def get_latest_news(
         query = query.where(News.source == source)
         count_query = count_query.where(News.source == source)
 
+    # Apply category filter if provided
+    if category:
+        query = query.where(News.category == category)
+        count_query = count_query.where(News.category == category)
+
     # Apply text search if provided
     if search_conditions is not None:
         query = query.where(search_conditions)
@@ -125,21 +132,72 @@ async def get_latest_news(
     result = await db.execute(query)
     articles = result.scalars().all()
 
-    # Build response items
-    items = [
-        {
+    # Build response items with presigned URLs for images
+    items = []
+    for article in articles:
+        # Generate presigned URL for image if it exists
+        image_url = article.image_url
+        if image_url:
+            try:
+                # Extract S3 key from URL
+                # Stored format can be:
+                # 1. s3://bucket/path (e.g., s3://output/news-images/iribnews/2025/12/30/abc123.jpg)
+                # 2. {endpoint}/{bucket}/{key} (e.g., https://gpmedia.iribnews.ir/output/news-images/...)
+                # 3. Just the key (e.g., news-images/iribnews/2025/12/30/abc123.jpg)
+                if image_url.startswith("s3://"):
+                    # Parse s3://bucket/path format
+                    # Remove "s3://" prefix
+                    path_after_s3 = image_url[5:]  # Remove "s3://"
+                    # Split bucket and key
+                    parts = path_after_s3.split("/", 1)
+                    if len(parts) == 2:
+                        path_bucket, s3_key = parts
+                        # Use the path after bucket as key (regardless of bucket name)
+                        s3_key = s3_key
+                    else:
+                        # No path after bucket, this shouldn't happen but use as-is
+                        s3_key = path_after_s3
+                    logger.debug(f"Extracted S3 key from s3:// URL: {s3_key}")
+                elif image_url.startswith(settings.s3_endpoint):
+                    # Remove endpoint and bucket to get the key
+                    prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}/"
+                    if image_url.startswith(prefix):
+                        s3_key = image_url[len(prefix):]
+                    else:
+                        # Try without trailing slash
+                        prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}"
+                        if image_url.startswith(prefix):
+                            s3_key = image_url[len(prefix):].lstrip("/")
+                        else:
+                            s3_key = image_url
+                else:
+                    # Assume it's already an S3 key
+                    s3_key = image_url
+                
+                presigned = await generate_presigned_url(s3_key)
+                if presigned:
+                    image_url = presigned
+            except Exception as e:
+                # If presigned URL generation fails, use original URL
+                logger.warning(f"Failed to generate presigned URL for {image_url}: {e}")
+        
+        # Format published_at to Persian date
+        published_at_persian = None
+        if article.published_at:
+            published_at_persian = format_persian_date(article.published_at)
+        
+        items.append({
             "id": str(article.id),
             "source": article.source,
             "title": article.title,
             "summary": article.summary,
             "url": article.url,
-            "published_at": article.published_at,
+            "published_at": published_at_persian,  # Use Persian formatted date
             "created_at": article.created_at.isoformat() if article.created_at else None,
-            "image_url": article.image_url,
+            "image_url": image_url,
             "category": article.category,
-        }
-        for article in articles
-    ]
+            "raw_category": article.raw_category,
+        })
 
     # Calculate has_more
     has_more = (offset + limit) < total
@@ -174,11 +232,13 @@ async def get_news_by_id(
         HTTPException: 404 if article not found
     """
     try:
-        article_uuid = UUID(news_id)
+        # Validate UUID format
+        UUID(news_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid news ID format: {news_id}")
 
-    result = await db.execute(select(News).where(News.id == article_uuid))
+    # Compare as string since SQLite stores UUIDs as strings
+    result = await db.execute(select(News).where(News.id == news_id))
     article = result.scalar_one_or_none()
 
     if not article:

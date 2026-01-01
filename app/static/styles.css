@@ -276,12 +276,136 @@ main {
 }
 
 
+/* View Mode Toggle */
+.view-mode-toggle {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.view-btn {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 0.5rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    color: #666;
+}
+
+.view-btn:hover {
+    background-color: #f8f9fa;
+    border-color: #3498db;
+    color: #3498db;
+}
+
+.view-btn.active {
+    background-color: #3498db;
+    border-color: #3498db;
+    color: white;
+}
+
+.view-btn svg {
+    display: block;
+}
+
 /* News Grid - 3 columns to match parent grid */
 .news-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 1.5rem;
     margin-top: 1rem; /* فاصله واضح بین هدر و اولین ردیف اخبار */
+}
+
+/* News List View */
+.news-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.news-list .news-card {
+    height: auto;
+    min-height: auto;
+    max-height: none;
+}
+
+.news-list .news-card-link {
+    display: block;
+    width: 100%;
+}
+
+.news-list .news-card-grid {
+    display: grid;
+    grid-template-columns: 150px 1fr 180px;
+    gap: 1.5rem;
+    align-items: center;
+    padding: 1rem 1.5rem;
+}
+
+.news-list .news-source-col {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.news-list .news-title-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.news-list .news-title-col .news-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    line-height: 1.5;
+    margin: 0;
+    -webkit-line-clamp: 2;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    color: #2c3e50;
+}
+
+.news-list .news-title-col .news-category {
+    font-size: 0.85rem;
+    color: #666;
+    font-weight: 500;
+}
+
+.news-list .news-date-col {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    text-align: left;
+}
+
+.news-list .news-date-col .news-date {
+    font-size: 0.9rem;
+    color: #999;
+    white-space: nowrap;
+}
+
+.news-list .news-card .news-image {
+    display: none;
+}
+
+.news-list .news-card .news-image.news-image-hidden {
+    display: none;
+}
+
+.news-list .news-card .source-badge {
+    position: static;
+    display: inline-block;
+    margin: 0;
+    box-shadow: none;
 }
 
 /* News Card */
@@ -294,6 +418,41 @@ main {
     display: flex;
     flex-direction: column;
     height: 380px;
+}
+
+/* Grid View Structure */
+.news-card-grid-view {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.news-card-grid {
+    display: none; /* Hidden by default, shown only in list view */
+}
+
+/* Grid View - show grid structure, hide list structure */
+.news-grid .news-card-grid-view {
+    display: flex;
+}
+
+.news-grid .news-card-grid {
+    display: none;
+}
+
+.news-grid .news-card-link {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* List View - show list structure, hide grid structure */
+.news-list .news-card-grid-view {
+    display: none;
+}
+
+.news-list .news-card-grid {
+    display: grid;
 }
 
 .news-card:hover {
@@ -816,7 +975,79 @@ footer p {
     }
 }
 
-/* Pagination Controls */
+/* Scroll to Top Button */
+.scroll-to-top {
+    position: fixed;
+    bottom: 2rem;
+    left: 2rem;
+    width: 50px;
+    height: 50px;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
+    transition: all 0.3s ease;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(20px);
+    z-index: 999;
+}
+
+.scroll-to-top.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.scroll-to-top:hover {
+    background-color: #2980b9;
+    box-shadow: 0 6px 16px rgba(52, 152, 219, 0.5);
+    transform: translateY(-3px);
+}
+
+.scroll-to-top:active {
+    transform: translateY(0);
+}
+
+.scroll-to-top svg {
+    width: 24px;
+    height: 24px;
+}
+
+/* Loading Indicator */
+.loading-indicator {
+    margin-top: 2rem;
+    text-align: center;
+    padding: 2rem 0;
+}
+
+.loading-spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loading-indicator p {
+    color: #666;
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+}
+
+/* Pagination Controls (kept for backward compatibility) */
 .pagination-controls {
     margin-top: 2rem;
     text-align: center;
@@ -864,6 +1095,17 @@ footer p {
     .news-grid {
         grid-template-columns: repeat(2, 1fr);
     }
+    
+    .news-list .news-card-grid {
+        grid-template-columns: 120px 1fr 140px;
+        gap: 1rem;
+        padding: 0.75rem 1rem;
+    }
+    
+    .news-list .news-title-col .news-title {
+        font-size: 1rem;
+        -webkit-line-clamp: 2;
+    }
 }
 
 @media (max-width: 1024px) {
@@ -887,6 +1129,38 @@ footer p {
     
     .news-image {
         height: 180px;
+    }
+    
+    .news-list .news-card-grid {
+        grid-template-columns: 100px 1fr 120px;
+        gap: 0.75rem;
+        padding: 0.75rem;
+    }
+    
+    .news-list .news-title-col .news-title {
+        font-size: 0.95rem;
+        -webkit-line-clamp: 2;
+    }
+    
+    .news-list .news-date-col .news-date {
+        font-size: 0.8rem;
+    }
+    
+    .news-list .news-source-col .source-badge {
+        font-size: 0.7rem;
+        padding: 0.3rem 0.6rem;
+    }
+    
+    .scroll-to-top {
+        width: 45px;
+        height: 45px;
+        bottom: 1.5rem;
+        left: 1.5rem;
+    }
+    
+    .scroll-to-top svg {
+        width: 20px;
+        height: 20px;
     }
 }
 

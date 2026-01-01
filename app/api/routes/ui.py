@@ -30,6 +30,7 @@ SOURCE_NAMES = {
     "tasnim": "خبرگزاری تسنیم",
     "fars": "خبرگزاری فارس",
     "iribnews": "خبرگزاری صداوسیما",
+    "ilna": "ایلنا",
 }
 
 # Color codes for sources
@@ -40,6 +41,7 @@ SOURCE_COLORS = {
     "tasnim": "#f39c12",    # نارنجی
     "fars": "#9b59b6",      # بنفش
     "iribnews": "#16a085",  # فیروزه‌ای
+    "ilna": "#e67e22",      # نارنجی تیره
 }
 
 # Persian names for normalized categories
@@ -374,11 +376,13 @@ async def news_detail(
         HTTPException: 404 if article not found
     """
     try:
-        article_uuid = UUID(news_id)
+        # Validate UUID format
+        UUID(news_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid news ID format")
 
-    result = await db.execute(select(News).where(News.id == article_uuid))
+    # Compare as string since SQLite stores UUIDs as strings
+    result = await db.execute(select(News).where(News.id == news_id))
     article = result.scalar_one_or_none()
 
     if not article:

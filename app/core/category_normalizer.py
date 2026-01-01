@@ -360,6 +360,57 @@ CATEGORY_MAPPINGS = {
         "خراسان شمالی": "provinces",
         "خراسان جنوبی": "provinces",
     },
+    "ilna": {
+        # Politics
+        "سیاسی": "politics",
+        "سیاست": "politics",
+        "سیاست داخلی": "politics",
+        "سیاست خارجی": "politics",
+        "داخلی": "politics",
+        "خارجی": "international",
+        # Economy
+        "اقتصادی": "economy",
+        "اقتصاد": "economy",
+        "اقتصاد و تجارت": "economy",
+        "بازار": "economy",
+        "بورس": "economy",
+        # Society
+        "اجتماعی": "society",
+        "جامعه": "society",
+        "حوادث": "society",
+        "قضایی": "society",
+        "حقوقی": "society",
+        "کارگری": "society",
+        # International
+        "بین‌الملل": "international",
+        "بین الملل": "international",
+        "جهان": "international",
+        # Culture
+        "فرهنگی": "culture",
+        "فرهنگ": "culture",
+        "هنر": "culture",
+        "سینما": "culture",
+        "موسیقی": "culture",
+        "ادبیات": "culture",
+        # Sports
+        "ورزشی": "sports",
+        "ورزش": "sports",
+        "فوتبال": "sports",
+        # Science
+        "علمی": "science",
+        "علم": "science",
+        "پزشکی": "health",
+        "سلامت": "health",
+        # Technology
+        "فناوری": "technology",
+        "تکنولوژی": "technology",
+        "IT": "technology",
+        "رایانه": "technology",
+        # Provinces
+        "استانها": "provinces",
+        "استان‌ها": "provinces",
+        "استان ها": "provinces",
+    },
 }
 
 

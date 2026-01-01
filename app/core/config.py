@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # Database
-    database_url: str = "postgresql+asyncpg://postgres:postgres@postgres:5432/news_db"
+    # Use SQLite for local development, PostgreSQL for production
+    database_url: str = "sqlite+aiosqlite:///./news_db.sqlite" if _use_env_file else "postgresql+asyncpg://postgres:postgres@postgres:5432/news_db"
 
     # S3 Storage
     s3_endpoint: str = "http://minio:9000"

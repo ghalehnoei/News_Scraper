@@ -1,4 +1,4 @@
-"""MehrNews worker implementation."""
+"""ILNA worker implementation."""
 
 import asyncio
 import hashlib
@@ -23,23 +23,23 @@ from app.storage.s3 import get_s3_session, init_s3
 from app.workers.base_worker import BaseWorker
 from app.workers.rate_limiter import RateLimiter
 
-logger = setup_logging(source="mehrnews")
+logger = setup_logging(source="ilna")
 
 # RSS feed URL
-MEHRNEWS_RSS_URL = "https://www.mehrnews.com/rss"
+ILNA_RSS_URL = "https://www.ilna.ir/fa/feeds/"
 
 # HTTP client settings
 HTTP_TIMEOUT = aiohttp.ClientTimeout(total=30, connect=10)
 HTTP_RETRIES = 3
 
 
-class MehrNewsWorker(BaseWorker):
-    """Worker for MehrNews RSS feed."""
+class ILNAWorker(BaseWorker):
+    """Worker for ILNA RSS feed."""
 
     def __init__(self):
-        """Initialize MehrNews worker."""
-        super().__init__("mehrnews")
-        self.rss_url = MEHRNEWS_RSS_URL
+        """Initialize ILNA worker."""
+        super().__init__("ilna")
+        self.rss_url = ILNA_RSS_URL
         self.http_session: Optional[aiohttp.ClientSession] = None
         self._s3_initialized = False
         
@@ -72,7 +72,7 @@ class MehrNewsWorker(BaseWorker):
         Args:
             url: URL to fetch
             max_retries: Maximum number of retry attempts
-            request_type: Type of request (rss, article) for logging
+            request_type: Type of request (rss, article, image) for logging
 
         Returns:
             Response content as bytes, or None if all retries failed
@@ -195,12 +195,36 @@ class MehrNewsWorker(BaseWorker):
             return []
 
         for entry in feed.entries:
+            # Extract image from enclosure if available
+            image_url = ""
+            if hasattr(entry, 'enclosures') and entry.enclosures:
+                for enclosure in entry.enclosures:
+                    if enclosure.get('type', '').startswith('image/'):
+                        image_url = enclosure.get('url', '')
+                        break
+            
+            # Extract category from various RSS fields
+            category = ""
+            # Try tags first
+            if entry.get("tags"):
+                category = entry.get("tags", [{}])[0].get("term", "")
+            # Try category field
+            if not category and entry.get("category"):
+                category = entry.get("category")
+            # Try dc:subject (Dublin Core)
+            if not category and hasattr(entry, 'dc_subject'):
+                if isinstance(entry.dc_subject, list) and entry.dc_subject:
+                    category = entry.dc_subject[0]
+                elif isinstance(entry.dc_subject, str):
+                    category = entry.dc_subject
+            
             item = {
                 "title": entry.get("title", ""),
                 "link": entry.get("link", ""),
                 "description": entry.get("description", ""),
                 "pubDate": entry.get("published", ""),
-                "category": entry.get("tags", [{}])[0].get("term", "") if entry.get("tags") else "",
+                "category": category,
+                "image_url": image_url,
             }
             if item["link"]:  # Only add items with valid links
                 items.append(item)
@@ -293,16 +317,68 @@ class MehrNewsWorker(BaseWorker):
                 # Remove script and style tags
                 for tag in article_tag.find_all(["script", "style", "iframe"]):
                     tag.decompose()
-                # Remove ads and social media widgets
-                for tag in article_tag.find_all(class_=lambda x: x and any(skip in x.lower() for skip in ["ad", "advertisement", "social", "share"])):
+                
+                # Remove specific unwanted classes for ILNA
+                unwanted_classes = [
+                    "ad", "advertisement", "social", "share",
+                    "short_link_box",  # ILNA specific
+                    "noprint",  # ILNA specific
+                    "zxc_mb"  # ILNA specific
+                ]
+                
+                # Remove elements with unwanted classes
+                for tag in article_tag.find_all(class_=lambda x: x and any(skip in x.lower() for skip in unwanted_classes)):
                     tag.decompose()
-                # Remove content after "کد خبر"
-                code_marker = article_tag.find(string=lambda text: text and "کد خبر" in text)
-                if code_marker:
-                    marker_parent = code_marker.parent
-                    for node in list(marker_parent.find_all_next()):
-                        node.decompose()
-                    marker_parent.decompose()
+                
+                # Also remove elements that have class="noprint zxc_mb" or similar combinations
+                for tag in article_tag.find_all(class_=lambda x: x and ("noprint" in x.lower() and "zxc_mb" in x.lower())):
+                    tag.decompose()
+                
+                # Remove content after "انتهای پیام" (end of message marker)
+                # Search for the marker text in the article
+                end_marker = article_tag.find(string=lambda text: text and "انتهای پیام" in text)
+                if end_marker:
+                    marker_parent = end_marker.parent
+                    if marker_parent and marker_parent.parent:
+                        # Get the parent container
+                        container = marker_parent.parent
+                        
+                        # Get all children of the container
+                        all_children = list(container.children)
+                        
+                        # Find the index of marker_parent
+                        try:
+                            marker_index = None
+                            for i, child in enumerate(all_children):
+                                # Check if this child is marker_parent or contains marker_parent
+                                if child == marker_parent:
+                                    marker_index = i
+                                    break
+                                # Also check if marker_parent is a descendant
+                                if hasattr(child, 'find') and child.find(lambda tag: tag == marker_parent):
+                                    marker_index = i
+                                    break
+                            
+                            # Remove all children after marker_parent
+                            if marker_index is not None:
+                                removed_count = 0
+                                # Work backwards to avoid index issues
+                                for i in range(len(all_children) - 1, marker_index, -1):
+                                    child = all_children[i]
+                                    if hasattr(child, 'decompose'):
+                                        try:
+                                            child.decompose()
+                                            removed_count += 1
+                                        except:
+                                            pass
+                                
+                                self.logger.debug(
+                                    f"Removed {removed_count} elements after 'انتهای پیام' marker (kept marker itself)",
+                                    extra={"article_url": url}
+                                )
+                        except Exception as e:
+                            self.logger.warning(f"Error removing content after 'انتهای پیام': {e}", extra={"article_url": url})
+                
                 body_html = str(article_tag)
             else:
                 self.logger.warning(f"Could not find article body content", extra={"article_url": url})
@@ -318,18 +394,208 @@ class MehrNewsWorker(BaseWorker):
                 if first_p:
                     summary = first_p.get_text(strip=True)[:500]
 
-            # Extract category
+            # Extract category and published date
             category = ""
-            category_tag = soup.find("meta", attrs={"property": "article:section"})
-            if category_tag and category_tag.get("content"):
-                category = category_tag["content"]
-            else:
-                # Try to find category in breadcrumbs or navigation
-                breadcrumb = soup.find("nav", class_=re.compile("breadcrumb", re.I))
-                if breadcrumb:
-                    links = breadcrumb.find_all("a")
-                    if len(links) > 1:
-                        category = links[-1].get_text(strip=True)
+            published_at = ""
+            
+            # Priority 1: Extract category from breadcrumb_list class (highest priority)
+            breadcrumb_list = soup.find(class_="breadcrumb_list")
+            if breadcrumb_list:
+                self.logger.debug(f"Found breadcrumb_list element (priority 1)", extra={"article_url": url})
+                # Log the HTML structure for debugging
+                self.logger.debug(f"breadcrumb_list HTML: {str(breadcrumb_list)[:500]}", extra={"article_url": url})
+                
+                # Extract category from links in breadcrumb_list
+                category_links = breadcrumb_list.find_all("a")
+                if category_links:
+                    self.logger.debug(f"Found {len(category_links)} links in breadcrumb_list", extra={"article_url": url})
+                    # Log all link texts
+                    link_texts = [link.get_text(strip=True) for link in category_links]
+                    self.logger.debug(f"Link texts: {link_texts}", extra={"article_url": url})
+                    
+                    # Try last link first (category is usually the last item in breadcrumb)
+                    for link in reversed(category_links):
+                        link_text = link.get_text(strip=True)
+                        # Skip common non-category text
+                        skip_texts = ["خانه", "صفحه اصلی", "Home", "خانه", "اخبار", "خبر", "", "صفحه نخست", "ایستگاه خبر"]
+                        if link_text and link_text not in skip_texts:
+                            # Also check href to skip home links
+                            href = link.get("href", "")
+                            if href and not any(skip in href.lower() for skip in ["/fa", "/", "index", "home", "#"]):
+                                category = link_text
+                                self.logger.debug(f"Found category from breadcrumb_list link (last): {category}", extra={"article_url": url})
+                                break
+                    
+                    # If not found from last link, try all links from beginning
+                    if not category:
+                        for link in category_links:
+                            link_text = link.get_text(strip=True)
+                            skip_texts = ["خانه", "صفحه اصلی", "Home", "خانه", "اخبار", "خبر", "", "صفحه نخست", "ایستگاه خبر"]
+                            if link_text and link_text not in skip_texts:
+                                href = link.get("href", "")
+                                if href and not any(skip in href.lower() for skip in ["/fa", "/", "index", "home", "#"]):
+                                    category = link_text
+                                    self.logger.debug(f"Found category from breadcrumb_list link: {category}", extra={"article_url": url})
+                                    break
+                
+                # If no category from links, try spans, divs, or li elements
+                if not category:
+                    category_elements = breadcrumb_list.find_all(["span", "div", "li", "p"])
+                    self.logger.debug(f"Found {len(category_elements)} elements in breadcrumb_list", extra={"article_url": url})
+                    for elem in category_elements:
+                        elem_text = elem.get_text(strip=True)
+                        # Skip if it looks like a date or time
+                        if elem_text and not re.search(r'\d{4}.*\d{1,2}.*\d{1,2}', elem_text):
+                            skip_texts = ["خانه", "صفحه اصلی", "Home", "خانه", "اخبار", "خبر", "", "صفحه نخست", "ایستگاه خبر"]
+                            if elem_text not in skip_texts and len(elem_text) > 2:
+                                category = elem_text
+                                self.logger.debug(f"Found category from breadcrumb_list element: {category}", extra={"article_url": url})
+                                break
+                
+                # If still no category, try extracting from breadcrumb_list text directly
+                if not category:
+                    breadcrumb_text = breadcrumb_list.get_text(separator=" > ", strip=True)
+                    self.logger.debug(f"breadcrumb_list full text: {breadcrumb_text}", extra={"article_url": url})
+                    # Split by common separators
+                    parts = re.split(r'[>|/\\\s]+', breadcrumb_text)
+                    for part in reversed(parts):  # Start from end
+                        part = part.strip()
+                        # Skip if it looks like a date, time, or common words
+                        if part and not re.search(r'\d{4}.*\d{1,2}.*\d{1,2}', part):
+                            skip_texts = ["خانه", "صفحه اصلی", "Home", "خانه", "اخبار", "خبر", "", "صفحه نخست", "ایستگاه خبر"]
+                            if part not in skip_texts and len(part) > 2:
+                                category = part
+                                self.logger.debug(f"Found category from breadcrumb_list text: {category}", extra={"article_url": url})
+                                break
+            
+            # Fallback 1: try breadcrumb noprint class if breadcrumb_list didn't provide category
+            if not category:
+                breadcrumb_noprint = soup.find(class_=lambda x: x and "breadcrumb" in x.lower() and "noprint" in x.lower())
+                if breadcrumb_noprint:
+                    self.logger.debug(f"Found breadcrumb noprint element (fallback 1)", extra={"article_url": url})
+                    # Extract category from links in breadcrumb
+                    category_links = breadcrumb_noprint.find_all("a")
+                    if category_links:
+                        self.logger.debug(f"Found {len(category_links)} links in breadcrumb noprint", extra={"article_url": url})
+                        # Category is usually in one of the links (skip first link which is usually home)
+                        for link in category_links:
+                            link_text = link.get_text(strip=True)
+                            # Skip common non-category text
+                            skip_texts = ["خانه", "صفحه اصلی", "Home", "خانه", "اخبار", "خبر", ""]
+                            if link_text and link_text not in skip_texts:
+                                category = link_text
+                                self.logger.debug(f"Found category from breadcrumb noprint link: {category}", extra={"article_url": url})
+                                break
+                    
+                    # If no category from links, try spans or divs
+                    if not category:
+                        category_elements = breadcrumb_noprint.find_all(["span", "div", "li"])
+                        for elem in category_elements:
+                            elem_text = elem.get_text(strip=True)
+                            # Skip if it looks like a date or time
+                            if elem_text and not re.search(r'\d{4}.*\d{1,2}.*\d{1,2}', elem_text):
+                                skip_texts = ["خانه", "صفحه اصلی", "Home", "خانه", "اخبار", "خبر", ""]
+                                if elem_text not in skip_texts and len(elem_text) > 2:
+                                    category = elem_text
+                                    self.logger.debug(f"Found category from breadcrumb noprint element: {category}", extra={"article_url": url})
+                                    break
+            
+            # Then try bread_time class for published date (and category if not found yet)
+            bread_time = soup.find(class_="bread_time")
+            if bread_time:
+                self.logger.debug(f"Found bread_time element", extra={"article_url": url})
+                
+                # Only extract category from bread_time if not already found from breadcrumb noprint
+                if not category:
+                    # Method 1: Extract category from links in bread_time
+                    category_links = bread_time.find_all("a")
+                    if category_links:
+                        self.logger.debug(f"Found {len(category_links)} links in bread_time", extra={"article_url": url})
+                        # Category is usually in one of the links (skip first link which is usually home)
+                        for link in category_links:
+                            link_text = link.get_text(strip=True)
+                            # Skip common non-category text
+                            skip_texts = ["خانه", "صفحه اصلی", "Home", "خانه", "اخبار", "خبر", ""]
+                            if link_text and link_text not in skip_texts:
+                                category = link_text
+                                self.logger.debug(f"Found category from bread_time link: {category}", extra={"article_url": url})
+                                break
+                    
+                    # Method 2: If no category from links, try spans or divs
+                    if not category:
+                        category_elements = bread_time.find_all(["span", "div", "li"])
+                        for elem in category_elements:
+                            elem_text = elem.get_text(strip=True)
+                            # Skip if it looks like a date or time
+                            if elem_text and not re.search(r'\d{4}.*\d{1,2}.*\d{1,2}', elem_text):
+                                skip_texts = ["خانه", "صفحه اصلی", "Home", "خانه", "اخبار", "خبر", ""]
+                                if elem_text not in skip_texts and len(elem_text) > 2:
+                                    category = elem_text
+                                    self.logger.debug(f"Found category from bread_time element: {category}", extra={"article_url": url})
+                                    break
+                    
+                    # Method 3: Extract from bread_time text directly (split by common separators)
+                    if not category:
+                        bread_text = bread_time.get_text(separator="|", strip=True)
+                        self.logger.debug(f"bread_time text: {bread_text}", extra={"article_url": url})
+                        # Split by common separators
+                        parts = re.split(r'[|>\/\s]+', bread_text)
+                        for part in parts:
+                            part = part.strip()
+                            # Skip if it looks like a date, time, or common words
+                            if part and not re.search(r'\d{4}.*\d{1,2}.*\d{1,2}', part):
+                                skip_texts = ["خانه", "صفحه اصلی", "Home", "خانه", "اخبار", "خبر", "", "بازگشت"]
+                                if part not in skip_texts and len(part) > 2:
+                                    category = part
+                                    self.logger.debug(f"Found category from bread_time text split: {category}", extra={"article_url": url})
+                                    break
+                
+                # Extract published date from bread_time
+                # Date might be in text or in a specific element
+                bread_text = bread_time.get_text(strip=True)
+                # Look for date patterns in the text
+                date_patterns = [
+                    r'(\d{4}/\d{1,2}/\d{1,2})',  # 1403/10/12
+                    r'(\d{1,2}/\d{1,2}/\d{4})',  # 12/10/1403
+                    r'(\d{4}-\d{1,2}-\d{1,2})',  # 1403-10-12
+                ]
+                for pattern in date_patterns:
+                    match = re.search(pattern, bread_text)
+                    if match:
+                        published_at = match.group(1)
+                        break
+                
+                # Also check for time elements or spans within bread_time
+                time_elements = bread_time.find_all(["time", "span", "div"])
+                for elem in time_elements:
+                    elem_text = elem.get_text(strip=True)
+                    # Check if it looks like a date
+                    if re.search(r'\d{4}.*\d{1,2}.*\d{1,2}', elem_text):
+                        published_at = elem_text
+                        break
+                    # Check datetime attribute
+                    if elem.get("datetime"):
+                        published_at = elem.get("datetime")
+                        break
+            
+            # Fallback: try meta tags if bread_time didn't provide category
+            if not category:
+                self.logger.debug("Category not found in bread_time, trying fallback methods", extra={"article_url": url})
+                category_tag = soup.find("meta", attrs={"property": "article:section"})
+                if category_tag and category_tag.get("content"):
+                    category = category_tag["content"]
+                    self.logger.debug(f"Found category from meta tag: {category}", extra={"article_url": url})
+                else:
+                    # Try to find category in breadcrumbs or navigation
+                    breadcrumb = soup.find("nav", class_=re.compile("breadcrumb", re.I))
+                    if breadcrumb:
+                        links = breadcrumb.find_all("a")
+                        if len(links) > 1:
+                            category = links[-1].get_text(strip=True)
+                            self.logger.debug(f"Found category from breadcrumb nav: {category}", extra={"article_url": url})
+            
+            if not category:
+                self.logger.warning(f"Could not extract category from article page", extra={"article_url": url})
 
             # Extract main image - prefer og:image
             image_url = ""
@@ -356,6 +622,7 @@ class MehrNewsWorker(BaseWorker):
                 "summary": summary,
                 "category": category,
                 "image_url": image_url,
+                "published_at": published_at,
             }
         except Exception as e:
             self.logger.error(
@@ -437,18 +704,7 @@ class MehrNewsWorker(BaseWorker):
                 extension = ".gif"
             elif image_data[:4] == b"RIFF" and b"WEBP" in image_data[:12]:
                 extension = ".webp"
-            else:
-                # Try to get extension from URL
-                parsed_url = urlparse(url)
-                url_path = parsed_url.path.lower()
-                if url_path.endswith((".jpg", ".jpeg")):
-                    extension = ".jpg"
-                elif url_path.endswith(".png"):
-                    extension = ".png"
-                elif url_path.endswith(".gif"):
-                    extension = ".gif"
-                elif url_path.endswith(".webp"):
-                    extension = ".webp"
+            # Default to .jpg if format cannot be determined
             
             filename = f"{url_hash}{extension}"
             s3_path = (
@@ -516,16 +772,20 @@ class MehrNewsWorker(BaseWorker):
                 raw_category = article_content.get("category") or rss_item.get("category", "")
                 
                 # Normalize category
-                normalized_category, preserved_raw_category = normalize_category("mehrnews", raw_category)
+                normalized_category, preserved_raw_category = normalize_category("ilna", raw_category)
                 
                 # Create news article
+                # Use published_at from article_content (extracted from bread_time) if available,
+                # otherwise fall back to RSS pubDate
+                published_at = article_content.get("published_at") or rss_item.get("pubDate", "")
+                
                 news = News(
-                    source="mehrnews",
+                    source="ilna",
                     title=article_content.get("title") or rss_item["title"],
                     body_html=article_content.get("body_html", ""),
                     summary=article_content.get("summary") or rss_item.get("description", ""),
                     url=rss_item["link"],
-                    published_at=rss_item.get("pubDate", ""),
+                    published_at=published_at,
                     image_url=s3_image_url,
                     category=normalized_category,  # Store normalized category
                     raw_category=preserved_raw_category,  # Store original category
@@ -559,8 +819,8 @@ class MehrNewsWorker(BaseWorker):
                 raise
 
     async def fetch_news(self) -> None:
-        """Fetch and process news from MehrNews RSS feed."""
-        self.logger.info("Starting MehrNews fetch cycle")
+        """Fetch and process news from ILNA RSS feed."""
+        self.logger.info("Starting ILNA fetch cycle")
 
         # Ensure S3 is initialized
         await self._ensure_s3_initialized()
@@ -636,15 +896,17 @@ class MehrNewsWorker(BaseWorker):
                         failed += 1
                         continue
 
+                    # Use image from RSS enclosure if available, otherwise from article content
+                    image_url = rss_item.get("image_url") or article_content.get("image_url", "")
+                    
                     # Download and upload image
                     s3_image_url = ""
-                    image_url = article_content.get("image_url", "")
                     if image_url:
                         self.logger.debug(f"Downloading image: {image_url}")
                         image_data = await self._download_image(image_url)
                         if image_data:
                             s3_image_url = await self._upload_image_to_s3(
-                                image_data, "mehrnews", article_url
+                                image_data, "ilna", article_url
                             ) or ""
                         else:
                             self.logger.debug(f"Failed to download image: {image_url}")
@@ -695,5 +957,5 @@ class MehrNewsWorker(BaseWorker):
                 self.logger.warning(f"Error closing HTTP session: {e}")
             finally:
                 self.http_session = None
-                self.logger.info("MehrNews worker cleanup complete")
+                self.logger.info("ILNA worker cleanup complete")
 

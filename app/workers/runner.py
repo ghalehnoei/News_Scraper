@@ -16,6 +16,7 @@ from app.sources.irna import IRNAWorker
 from app.sources.fars import FarsWorker
 from app.sources.tasnim import TasnimWorker
 from app.sources.iribnews import IRIBNewsWorker
+from app.sources.ilna import ILNAWorker
 
 
 async def main() -> None:
@@ -40,27 +41,40 @@ async def main() -> None:
         worker = TasnimWorker()
     elif settings.worker_source == "iribnews":
         worker = IRIBNewsWorker()
+    elif settings.worker_source == "ilna":
+        worker = ILNAWorker()
     else:
         # Fallback to base worker for unknown sources
         worker = BaseWorker(settings.worker_source)
 
     try:
         await worker.run()
+        logger.info("Worker completed normally")
     except KeyboardInterrupt:
         logger.info("Worker interrupted by user (Ctrl+C)")
         # Trigger graceful shutdown
-        worker.running = False
-        worker._shutdown_event.set()
-        # Cleanup if worker has cleanup method
-        if hasattr(worker, "cleanup"):
-            await worker.cleanup()
+        worker.shutdown()
+        # Give the worker a moment to finish current operations
+        try:
+            await asyncio.wait_for(worker._shutdown_event.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            logger.warning("Shutdown timeout, forcing exit...")
+        # Cleanup is handled in worker.run() finally block
+        logger.info("Worker shutdown complete")
     except Exception as e:
         logger.error(f"Worker failed: {e}", exc_info=True)
-        if hasattr(worker, "cleanup"):
-            await worker.cleanup()
+        worker.shutdown()
+        # Cleanup is handled in worker.run() finally block
         sys.exit(1)
+    finally:
+        # Ensure we exit cleanly
+        logger.debug("Exiting worker process")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Received KeyboardInterrupt, exiting...")
+        sys.exit(0)
 

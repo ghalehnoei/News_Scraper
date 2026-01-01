@@ -5,8 +5,8 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import String, Text, Boolean, Integer, DateTime, UniqueConstraint, Column
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.base import Base
 
@@ -29,7 +29,8 @@ class News(Base):
 
     __tablename__ = "news"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False)
+    # Use database-agnostic UUID handling
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), nullable=False)
     source = Column(String(100), nullable=False, index=True)
     title = Column(String(500), nullable=False)
     body_html = Column(Text, nullable=True)

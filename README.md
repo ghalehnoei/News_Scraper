@@ -238,6 +238,45 @@ docker-compose logs -f worker_fars
 
 ## Development
 
+### Local Development with SQLite (Recommended for Easy Setup)
+
+For easier development without external dependencies, the application can use SQLite instead of PostgreSQL:
+
+1. **Setup virtual environment and install dependencies:**
+   ```powershell
+   # Create virtual environment
+   python -m venv venv
+
+   # Install dependencies
+   .\venv\Scripts\pip install -r requirements.txt
+   ```
+
+2. **Initialize the database:**
+   ```powershell
+   # Set environment variable to use SQLite
+   $env:USE_ENV_FILE = "true"
+
+   # Initialize database tables
+   .\venv\Scripts\python.exe init_db.py
+   ```
+
+3. **Run the development scripts:**
+   ```powershell
+   # Run API server
+   .\run-dev.ps1
+
+   # Or run database operations
+   .\run-db.ps1 -Action init      # Initialize database
+   .\run-db.ps1 -Action migrate   # Run migrations
+   .\run-db.ps1 -Action cleanup   # Clean up data
+   ```
+
+4. **Access the application:**
+   - Web interface: http://localhost:3000
+   - API endpoints available at the same host/port
+
+**Note:** The `.env` file is pre-configured for SQLite development. Set `USE_ENV_FILE=true` to use SQLite, or leave it unset for PostgreSQL in production.
+
 ### Local Development (without Docker)
 
 A PowerShell script (`run-local.ps1`) is provided to simplify local development:

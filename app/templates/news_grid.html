@@ -52,48 +52,97 @@
             <p>{{ search_error }}</p>
         </div>
         {% endif %}
-        <div class="news-grid">
+        
+        <!-- View Mode Toggle -->
+        <div class="view-mode-toggle">
+            <button id="gridViewBtn" class="view-btn active" onclick="switchViewMode('grid')" title="نمایش گرید">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2" y="2" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                    <rect x="12" y="2" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                    <rect x="2" y="12" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                    <rect x="12" y="12" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                </svg>
+            </button>
+            <button id="listViewBtn" class="view-btn" onclick="switchViewMode('list')" title="نمایش لیست">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2" y="3" width="16" height="2" rx="1" fill="currentColor"/>
+                    <rect x="2" y="9" width="16" height="2" rx="1" fill="currentColor"/>
+                    <rect x="2" y="15" width="16" height="2" rx="1" fill="currentColor"/>
+                </svg>
+            </button>
+        </div>
+        
+        <div class="news-grid" id="newsContainer">
             {% if articles %}
                 {% for article in articles %}
         <article class="news-card" data-news-id="{{ article.id }}" onclick="openNewsModal('{{ article.id }}')">
-            <a href="javascript:void(0);">
-                {% if article.image_url %}
-                <div class="news-image">
-                    <img src="{{ article.image_url }}" alt="{{ article.title }}" 
-                         onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                    <div class="image-placeholder" style="display: none;">
-                        <span>بدون تصویر</span>
+            <a href="javascript:void(0);" class="news-card-link">
+                <!-- Grid View Structure -->
+                <div class="news-card-grid-view">
+                    {% if article.image_url %}
+                    <div class="news-image">
+                        <img src="{{ article.image_url }}" alt="{{ article.title }}" 
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <div class="image-placeholder" style="display: none;">
+                            <span>بدون تصویر</span>
+                        </div>
+                        <span class="source-badge" style="background-color: {{ article.source_color }};">
+                            {{ article.source_persian }}
+                        </span>
                     </div>
-                    <span class="source-badge" style="background-color: {{ article.source_color }};">
-                        {{ article.source_persian }}
-                    </span>
-                </div>
-                {% else %}
-                <div class="news-image">
-                    <div class="image-placeholder">
-                        <span>بدون تصویر</span>
+                    {% else %}
+                    <div class="news-image">
+                        <div class="image-placeholder">
+                            <span>بدون تصویر</span>
+                        </div>
+                        <span class="source-badge" style="background-color: {{ article.source_color }};">
+                            {{ article.source_persian }}
+                        </span>
                     </div>
-                    <span class="source-badge" style="background-color: {{ article.source_color }};">
-                        {{ article.source_persian }}
-                    </span>
-                </div>
-                {% endif %}
-                
-                <div class="news-content">
-                    <h2 class="news-title">{{ article.title }}</h2>
-                </div>
-                
-                <div class="news-footer">
-                    <div class="news-footer-left">
-                        {% if article.raw_category %}
-                        <span class="news-category">{{ article.raw_category }}</span>
-                        {% elif article.category_persian %}
-                        <span class="news-category">{{ article.category_persian }}</span>
+                    {% endif %}
+                    
+                    <div class="news-content">
+                        <h2 class="news-title">{{ article.title }}</h2>
+                    </div>
+                    
+                    <div class="news-footer">
+                        <div class="news-footer-left">
+                            {% if article.raw_category %}
+                            <span class="news-category">{{ article.raw_category }}</span>
+                            {% elif article.category_persian %}
+                            <span class="news-category">{{ article.category_persian }}</span>
+                            {% endif %}
+                        </div>
+                        {% if article.published_at %}
+                        <span class="news-date">{{ article.published_at|persian_date }}</span>
                         {% endif %}
                     </div>
-                    {% if article.published_at %}
-                    <span class="news-date">{{ article.published_at|persian_date }}</span>
-                    {% endif %}
+                </div>
+                
+                <!-- List View Structure -->
+                <div class="news-card-grid">
+                    <div class="news-source-col">
+                        <span class="source-badge" style="background-color: {{ article.source_color }};">
+                            {{ article.source_persian }}
+                        </span>
+                    </div>
+                    <div class="news-title-col">
+                        <h2 class="news-title">{{ article.title }}</h2>
+                        {% if article.raw_category or article.category_persian %}
+                        <span class="news-category">
+                            {% if article.raw_category %}
+                                {{ article.raw_category }}
+                            {% elif article.category_persian %}
+                                {{ article.category_persian }}
+                            {% endif %}
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div class="news-date-col">
+                        {% if article.published_at %}
+                        <span class="news-date">{{ article.published_at|persian_date }}</span>
+                        {% endif %}
+                    </div>
                 </div>
             </a>
         </article>
@@ -106,15 +155,20 @@
         </div>
         
         {% if pagination.has_more %}
-        <div class="pagination-controls">
-            <a href="/ui/news?limit={{ pagination.limit }}&offset={{ pagination.offset + pagination.limit }}{% if current_source %}&source={{ current_source }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if current_query %}&q={{ current_query }}{% endif %}" 
-               class="load-more-btn">
-                نمایش بیشتر
-            </a>
+        <div id="loading-indicator" class="loading-indicator" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>در حال بارگذاری اخبار بیشتر...</p>
         </div>
         {% endif %}
     </div>
 </div>
+
+<!-- Scroll to Top Button -->
+<button id="scrollToTopBtn" class="scroll-to-top" onclick="scrollToTop()" title="بازگشت به بالا">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+</button>
 
 <!-- News Modal -->
 <div id="newsModal" class="modal">
@@ -293,6 +347,268 @@ if (searchWords && searchWords.length > 0) {
         }
     });
 }
+
+// View Mode Toggle Functionality
+function switchViewMode(mode) {
+    const container = document.getElementById('newsContainer');
+    const gridBtn = document.getElementById('gridViewBtn');
+    const listBtn = document.getElementById('listViewBtn');
+    
+    // Remove all view classes
+    container.classList.remove('news-grid', 'news-list');
+    
+    // Remove active class from buttons
+    gridBtn.classList.remove('active');
+    listBtn.classList.remove('active');
+    
+    // Add appropriate class and activate button
+    if (mode === 'grid') {
+        container.classList.add('news-grid');
+        gridBtn.classList.add('active');
+        localStorage.setItem('newsViewMode', 'grid');
+    } else {
+        container.classList.add('news-list');
+        listBtn.classList.add('active');
+        localStorage.setItem('newsViewMode', 'list');
+    }
+}
+
+// Load saved view mode preference
+document.addEventListener('DOMContentLoaded', function() {
+    const savedMode = localStorage.getItem('newsViewMode') || 'grid';
+    switchViewMode(savedMode);
+});
+
+// Infinite scroll functionality
+let isLoading = false;
+let hasMore = {{ 'true' if pagination.has_more else 'false' }};
+let currentOffset = {{ pagination.offset }};
+let currentLimit = {{ pagination.limit }};
+const loadingIndicator = document.getElementById('loading-indicator');
+
+// Hide loading indicator initially if no more articles
+if (loadingIndicator && !hasMore) {
+    loadingIndicator.style.display = 'none';
+}
+
+// Build query parameters
+function buildQueryParams(offset) {
+    const params = new URLSearchParams();
+    params.set('limit', currentLimit);
+    params.set('offset', offset);
+    {% if current_source %}
+    params.set('source', '{{ current_source }}');
+    {% endif %}
+    {% if current_category %}
+    params.set('category', '{{ current_category }}');
+    {% endif %}
+    {% if current_query %}
+    params.set('q', '{{ current_query }}');
+    {% endif %}
+    return params.toString();
+}
+
+// Load more articles
+async function loadMoreArticles() {
+    if (isLoading || !hasMore) return;
+    
+    isLoading = true;
+    if (loadingIndicator) {
+        loadingIndicator.style.display = 'block';
+    }
+    
+    try {
+        const nextOffset = currentOffset + currentLimit;
+        const queryParams = buildQueryParams(nextOffset);
+        const response = await fetch(`/news/latest?${queryParams}`);
+        
+        if (!response.ok) {
+            throw new Error('خطا در دریافت اخبار');
+        }
+        
+        const data = await response.json();
+        
+        if (data.items && data.items.length > 0) {
+            // Append new articles to container (preserves view mode)
+            const newsContainer = document.getElementById('newsContainer');
+            const newCards = [];
+            
+            data.items.forEach(article => {
+                const articleCard = createArticleCard(article);
+                newCards.push(articleCard);
+                newsContainer.appendChild(articleCard);
+            });
+            
+            // Highlight search words in new articles (after appending to DOM)
+            if (searchWords && searchWords.length > 0) {
+                newCards.forEach(card => {
+                    const titleEl = card.querySelector('.news-title');
+                    if (titleEl) {
+                        const originalText = titleEl.textContent;
+                        const highlighted = highlightText(originalText, searchWords);
+                        if (highlighted !== originalText) {
+                            titleEl.innerHTML = highlighted;
+                        }
+                    }
+                });
+            }
+            
+            // Update pagination state
+            currentOffset = nextOffset;
+            hasMore = data.pagination.has_more;
+            
+            if (!hasMore && loadingIndicator) {
+                loadingIndicator.style.display = 'none';
+            }
+        } else {
+            hasMore = false;
+            if (loadingIndicator) {
+                loadingIndicator.style.display = 'none';
+            }
+        }
+    } catch (error) {
+        console.error('Error loading more articles:', error);
+        if (loadingIndicator) {
+            loadingIndicator.innerHTML = '<p style="color: #e74c3c;">خطا در بارگذاری اخبار بیشتر</p>';
+        }
+    } finally {
+        isLoading = false;
+    }
+}
+
+// Create article card element
+function createArticleCard(article) {
+    const card = document.createElement('article');
+    card.className = 'news-card';
+    card.setAttribute('data-news-id', article.id);
+    card.onclick = () => openNewsModal(article.id);
+    
+    const imageUrl = article.image_url || '';
+    const sourcePersian = getSourcePersianName(article.source);
+    const sourceColor = getSourceColor(article.source);
+    const category = article.raw_category || article.category || '';
+    const publishedAt = article.published_at || '';
+    
+    card.innerHTML = `
+        <a href="javascript:void(0);" class="news-card-link">
+            <!-- Grid View Structure -->
+            <div class="news-card-grid-view">
+                ${imageUrl ? `
+                    <div class="news-image">
+                        <img src="${imageUrl.replace(/"/g, '&quot;')}" alt="${escapeHtml(article.title)}" 
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <div class="image-placeholder" style="display: none;">
+                            <span>بدون تصویر</span>
+                        </div>
+                        <span class="source-badge" style="background-color: ${sourceColor};">
+                            ${escapeHtml(sourcePersian)}
+                        </span>
+                    </div>
+                ` : `
+                    <div class="news-image">
+                        <div class="image-placeholder">
+                            <span>بدون تصویر</span>
+                        </div>
+                        <span class="source-badge" style="background-color: ${sourceColor};">
+                            ${escapeHtml(sourcePersian)}
+                        </span>
+                    </div>
+                `}
+                <div class="news-content">
+                    <h2 class="news-title">${escapeHtml(article.title)}</h2>
+                </div>
+                <div class="news-footer">
+                    <div class="news-footer-left">
+                        ${category ? `<span class="news-category">${escapeHtml(category)}</span>` : ''}
+                    </div>
+                    ${publishedAt ? `<span class="news-date">${formatPersianDate(publishedAt)}</span>` : ''}
+                </div>
+            </div>
+            
+            <!-- List View Structure -->
+            <div class="news-card-grid">
+                <div class="news-source-col">
+                    <span class="source-badge" style="background-color: ${sourceColor};">
+                        ${escapeHtml(sourcePersian)}
+                    </span>
+                </div>
+                <div class="news-title-col">
+                    <h2 class="news-title">${escapeHtml(article.title)}</h2>
+                    ${category ? `<span class="news-category">${escapeHtml(category)}</span>` : ''}
+                </div>
+                <div class="news-date-col">
+                    ${publishedAt ? `<span class="news-date">${formatPersianDate(publishedAt)}</span>` : ''}
+                </div>
+            </div>
+        </a>
+    `;
+    
+    return card;
+}
+
+// Source names mapping
+const sourceNames = {
+    "mehrnews": "خبرگزاری مهر",
+    "isna": "خبرگزاری ایسنا",
+    "irna": "خبرگزاری ایرنا",
+    "tasnim": "خبرگزاری تسنیم",
+    "fars": "خبرگزاری فارس",
+    "iribnews": "خبرگزاری صداوسیما",
+    "ilna": "ایلنا"
+};
+
+// Source colors mapping
+const sourceColors = {
+    "mehrnews": "#e74c3c",
+    "isna": "#3498db",
+    "irna": "#2ecc71",
+    "tasnim": "#f39c12",
+    "fars": "#9b59b6",
+    "iribnews": "#16a085",
+    "ilna": "#e67e22"
+};
+
+function getSourcePersianName(source) {
+    return sourceNames[source] || source;
+}
+
+function getSourceColor(source) {
+    return sourceColors[source] || "#95a5a6";
+}
+
+// Scroll to Top Button
+const scrollToTopBtn = document.getElementById('scrollToTopBtn');
+
+function scrollToTop() {
+    window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+    });
+}
+
+// Show/hide scroll to top button based on scroll position
+let scrollTimeout;
+window.addEventListener('scroll', () => {
+    // Throttle scroll events
+    clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const windowHeight = window.innerHeight;
+        const documentHeight = document.documentElement.scrollHeight;
+        
+        // Show scroll to top button when scrolled down more than 300px
+        if (scrollTop > 300) {
+            scrollToTopBtn.classList.add('visible');
+        } else {
+            scrollToTopBtn.classList.remove('visible');
+        }
+        
+        // Check if user scrolled near bottom (within 300px) for infinite scroll
+        if (scrollTop + windowHeight >= documentHeight - 300) {
+            loadMoreArticles();
+        }
+    }, 100);
+});
 </script>
 {% endblock %}
 

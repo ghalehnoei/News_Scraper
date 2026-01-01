@@ -5,7 +5,7 @@ from app.db.models import News
 
 async def main():
     async with AsyncSessionLocal() as db:
-        await db.execute(delete(News).where(News.source == "ilna"))
+        await db.execute(delete(News).where(News.source == "varzesh3"))
         await db.commit()
         print("Done")
 

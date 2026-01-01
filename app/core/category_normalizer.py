@@ -411,6 +411,116 @@ CATEGORY_MAPPINGS = {
         "استان‌ها": "provinces",
         "استان ها": "provinces",
     },
+    "mizan": {
+        # Politics
+        "سیاسی": "politics",
+        "سیاست": "politics",
+        "داخلی": "politics",
+        # Economy
+        "اقتصادی": "economy",
+        "اقتصاد": "economy",
+        # Society
+        "اجتماعی": "society",
+        "جامعه": "society",
+        "قضایی": "society",
+        "حقوق بشر": "society",
+        "محاکمه منافقین": "society",
+        # International
+        "بین‌الملل": "international",
+        "بین الملل": "international",
+        "جهان": "international",
+        # Culture
+        "فرهنگی": "culture",
+        "فرهنگ": "culture",
+        # Sports
+        "ورزشی": "sports",
+        "ورزش": "sports",
+        # Multimedia
+        "چندرسانه": "culture",
+        "چندرسانه‌ای": "culture",
+        "عمومی": "other",
+        "عکس": "culture",
+    },
+    "varzesh3": {
+        # Sports (all Varzesh3 news is sports-related)
+        "sports": "sports",  # Default category for all Varzesh3 news
+        "ورزشی": "sports",
+        "ورزش": "sports",
+        "فوتبال": "sports",
+        "فوتبال ایران": "sports",
+        "فوتبال جهان": "sports",
+        "لیگ برتر": "sports",
+        "لیگ برتر ایران": "sports",
+        "لیگ برتر انگلیس": "sports",
+        "لالیگا": "sports",
+        "سری آ": "sports",
+        "نقل و انتقالات": "sports",
+        "جام جهانی": "sports",
+        "جام ملت‌های آسیا": "sports",
+        "لیگ قهرمانان": "sports",
+        "لیگ قهرمانان اروپا": "sports",
+        "لیگ قهرمانان آسیا": "sports",
+        "والیبال": "sports",
+        "بسکتبال": "sports",
+        "هندبال": "sports",
+        "کشتی": "sports",
+        "وزنه‌برداری": "sports",
+        "ورزش‌های رزمی": "sports",
+        "فوتسال": "sports",
+        "تنیس": "sports",
+        "بازی‌های آسیایی": "sports",
+        "المپیک": "sports",
+    },
+    "kayhan": {
+        # Politics
+        "سیاسی": "politics",
+        "سیاست": "politics",
+        "سیاست داخلی": "politics",
+        "سیاست خارجی": "politics",
+        "داخلی": "politics",
+        "خارجی": "international",
+        # Economy
+        "اقتصادی": "economy",
+        "اقتصاد": "economy",
+        "اقتصاد و تجارت": "economy",
+        "بازار": "economy",
+        "بورس": "economy",
+        # Society
+        "اجتماعی": "society",
+        "جامعه": "society",
+        "حوادث": "society",
+        "قضایی": "society",
+        "حقوقی": "society",
+        # International
+        "بین‌الملل": "international",
+        "بین الملل": "international",
+        "جهان": "international",
+        # Culture
+        "فرهنگی": "culture",
+        "فرهنگ": "culture",
+        "هنر": "culture",
+        "سینما": "culture",
+        "موسیقی": "culture",
+        "ادبیات": "culture",
+        # Sports
+        "ورزشی": "sports",
+        "ورزش": "sports",
+        "فوتبال": "sports",
+        # Science
+        "علمی": "science",
+        "علم": "science",
+        "پزشکی": "health",
+        "سلامت": "health",
+        # Technology
+        "فناوری": "technology",
+        "تکنولوژی": "technology",
+        "IT": "technology",
+        "رایانه": "technology",
+        # Provinces
+        "استانها": "provinces",
+        "استان‌ها": "provinces",
+        "استان ها": "provinces",
+    },
 }
 
 

@@ -17,6 +17,9 @@ from app.sources.fars import FarsWorker
 from app.sources.tasnim import TasnimWorker
 from app.sources.iribnews import IRIBNewsWorker
 from app.sources.ilna import ILNAWorker
+from app.sources.kayhan import KayhanWorker
+from app.sources.mizan import MizanWorker
+from app.sources.varzesh3 import Varzesh3Worker
 
 
 async def main() -> None:
@@ -43,6 +46,12 @@ async def main() -> None:
         worker = IRIBNewsWorker()
     elif settings.worker_source == "ilna":
         worker = ILNAWorker()
+    elif settings.worker_source == "kayhan":
+        worker = KayhanWorker()
+    elif settings.worker_source == "mizan":
+        worker = MizanWorker()
+    elif settings.worker_source == "varzesh3":
+        worker = Varzesh3Worker()
     else:
         # Fallback to base worker for unknown sources
         worker = BaseWorker(settings.worker_source)

@@ -32,6 +32,9 @@ SOURCE_NAMES = {
     "fars": "خبرگزاری فارس",
     "iribnews": "خبرگزاری صداوسیما",
     "ilna": "ایلنا",
+    "kayhan": "کیهان",
+    "mizan": "خبرگزاری میزان",
+    "varzesh3": "ورزش3",
 }
 
 # Color codes for sources
@@ -43,6 +46,9 @@ SOURCE_COLORS = {
     "fars": "#9b59b6",      # بنفش
     "iribnews": "#16a085",  # فیروزه‌ای
     "ilna": "#e67e22",      # نارنجی تیره
+    "kayhan": "#c0392b",     # قرمز تیره
+    "mizan": "#8e44ad",      # بنفش تیره
+    "varzesh3": "#27ae60",   # سبز تیره
 }
 
 # Persian names for normalized categories

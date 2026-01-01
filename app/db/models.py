@@ -23,8 +23,8 @@ class GUID(TypeDecorator):
 
     def load_dialect_impl(self, dialect):
         if dialect.name == 'postgresql':
-            # Use UUID type for PostgreSQL
-            return dialect.type_descriptor(PG_UUID())
+            # Use UUID type for PostgreSQL (as_uuid=True means it works with UUID objects)
+            return dialect.type_descriptor(PG_UUID(as_uuid=True))
         else:
             # Use String for SQLite and other databases
             return dialect.type_descriptor(String(36))
@@ -33,12 +33,21 @@ class GUID(TypeDecorator):
         if value is None:
             return value
         elif dialect.name == 'postgresql':
-            # For PostgreSQL, keep as string (PG_UUID with as_uuid=False handles it)
+            # For PostgreSQL, convert string to UUID object
             if isinstance(value, uuid.UUID):
-                return str(value)
-            return str(value)
+                return value
+            elif isinstance(value, str):
+                try:
+                    return uuid.UUID(value)
+                except (ValueError, AttributeError):
+                    # If invalid UUID string, try to generate one or return None
+                    return None
+            else:
+                return uuid.UUID(str(value))
         else:
             # For SQLite, keep as string
+            if isinstance(value, uuid.UUID):
+                return str(value)
             if not isinstance(value, str):
                 return str(value)
             return value

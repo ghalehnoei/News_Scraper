@@ -4,11 +4,56 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, Text, Boolean, Integer, DateTime, UniqueConstraint, Column
+from sqlalchemy import String, Text, Boolean, Integer, DateTime, UniqueConstraint, Column, TypeDecorator
 from sqlalchemy.sql import func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 from app.db.base import Base
+from app.core.config import settings
+
+
+class GUID(TypeDecorator):
+    """
+    Platform-independent GUID type.
+    Uses PostgreSQL's UUID type when using PostgreSQL,
+    otherwise uses String(36) for SQLite and other databases.
+    """
+    impl = String
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            # Use UUID type for PostgreSQL
+            return dialect.type_descriptor(PG_UUID())
+        else:
+            # Use String for SQLite and other databases
+            return dialect.type_descriptor(String(36))
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return value
+        elif dialect.name == 'postgresql':
+            # For PostgreSQL, keep as string (PG_UUID with as_uuid=False handles it)
+            if isinstance(value, uuid.UUID):
+                return str(value)
+            return str(value)
+        else:
+            # For SQLite, keep as string
+            if not isinstance(value, str):
+                return str(value)
+            return value
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return value
+        elif dialect.name == 'postgresql':
+            # PostgreSQL returns UUID object, convert to string
+            if isinstance(value, uuid.UUID):
+                return str(value)
+            return str(value)
+        else:
+            # SQLite returns string
+            return str(value)
 
 
 class NewsSource(Base):
@@ -30,7 +75,8 @@ class News(Base):
     __tablename__ = "news"
 
     # Use database-agnostic UUID handling
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), nullable=False)
+    # GUID type automatically uses UUID for PostgreSQL and String for SQLite
+    id = Column(GUID(), primary_key=True, default=lambda: str(uuid.uuid4()), nullable=False)
     source = Column(String(100), nullable=False, index=True)
     title = Column(String(500), nullable=False)
     body_html = Column(Text, nullable=True)

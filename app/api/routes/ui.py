@@ -8,7 +8,8 @@ import bleach
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment
-from sqlalchemy import select, desc, func, or_, and_
+from sqlalchemy import select, desc, func, or_, and_, cast, String
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_db
@@ -381,8 +382,17 @@ async def news_detail(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid news ID format")
 
-    # Compare as string since SQLite stores UUIDs as strings
-    result = await db.execute(select(News).where(News.id == news_id))
+    # Handle PostgreSQL UUID vs SQLite string
+    # PostgreSQL stores UUID as UUID type, SQLite as string
+    from app.core.config import settings
+    if "postgresql" in settings.database_url.lower():
+        # For PostgreSQL, cast UUID column to text for comparison with string
+        result = await db.execute(
+            select(News).where(cast(News.id, String) == news_id)
+        )
+    else:
+        # For SQLite, compare as strings
+        result = await db.execute(select(News).where(News.id == news_id))
     article = result.scalar_one_or_none()
 
     if not article:

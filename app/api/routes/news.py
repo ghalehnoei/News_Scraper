@@ -7,7 +7,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, desc, func, or_, and_, or_
+from sqlalchemy import select, desc, func, or_, and_, or_, cast, text, String
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_db
@@ -237,8 +238,16 @@ async def get_news_by_id(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid news ID format: {news_id}")
 
-    # Compare as string since SQLite stores UUIDs as strings
-    result = await db.execute(select(News).where(News.id == news_id))
+    # Handle PostgreSQL UUID vs SQLite string
+    # PostgreSQL stores UUID as UUID type, SQLite as string
+    if "postgresql" in settings.database_url.lower():
+        # For PostgreSQL, cast UUID column to text for comparison with string
+        result = await db.execute(
+            select(News).where(cast(News.id, String) == news_id)
+        )
+    else:
+        # For SQLite, compare as strings
+        result = await db.execute(select(News).where(News.id == news_id))
     article = result.scalar_one_or_none()
 
     if not article:

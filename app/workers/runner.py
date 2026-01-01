@@ -7,8 +7,6 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.workers.base_worker import BaseWorker
 
-logger = setup_logging()
-
 # Import source-specific workers
 from app.sources.isna import ISNAWorker
 from app.sources.mehrnews import MehrNewsWorker
@@ -25,10 +23,10 @@ from app.sources.varzesh3 import Varzesh3Worker
 async def main() -> None:
     """Main entry point for worker process."""
     if not settings.worker_source:
-        logger.error("WORKER_SOURCE environment variable is required")
+        # Create a temporary logger for error message
+        temp_logger = setup_logging()
+        temp_logger.error("WORKER_SOURCE environment variable is required")
         sys.exit(1)
-
-    logger.info(f"Starting worker for source: {settings.worker_source}")
 
     # Instantiate appropriate worker based on source
     worker = None
@@ -56,34 +54,38 @@ async def main() -> None:
         # Fallback to base worker for unknown sources
         worker = BaseWorker(settings.worker_source)
 
+    worker.logger.info(f"Starting worker for source: {settings.worker_source}")
+
     try:
         await worker.run()
-        logger.info("Worker completed normally")
+        worker.logger.info("Worker completed normally")
     except KeyboardInterrupt:
-        logger.info("Worker interrupted by user (Ctrl+C)")
+        worker.logger.info("Worker interrupted by user (Ctrl+C)")
         # Trigger graceful shutdown
         worker.shutdown()
         # Give the worker a moment to finish current operations
         try:
             await asyncio.wait_for(worker._shutdown_event.wait(), timeout=5.0)
         except asyncio.TimeoutError:
-            logger.warning("Shutdown timeout, forcing exit...")
+            worker.logger.warning("Shutdown timeout, forcing exit...")
         # Cleanup is handled in worker.run() finally block
-        logger.info("Worker shutdown complete")
+        worker.logger.info("Worker shutdown complete")
     except Exception as e:
-        logger.error(f"Worker failed: {e}", exc_info=True)
+        worker.logger.error(f"Worker failed: {e}", exc_info=True)
         worker.shutdown()
         # Cleanup is handled in worker.run() finally block
         sys.exit(1)
     finally:
         # Ensure we exit cleanly
-        logger.debug("Exiting worker process")
+        worker.logger.debug("Exiting worker process")
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Received KeyboardInterrupt, exiting...")
+        # Create a temporary logger for this message since worker may not exist yet
+        temp_logger = setup_logging()
+        temp_logger.info("Received KeyboardInterrupt, exiting...")
         sys.exit(0)
 

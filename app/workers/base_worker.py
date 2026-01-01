@@ -13,8 +13,6 @@ from app.db.session import init_db, close_db
 from app.db.base import engine
 from app.storage.s3 import close_s3
 
-logger = setup_logging()
-
 # Check if running on Windows
 IS_WINDOWS = platform.system() == "Windows"
 

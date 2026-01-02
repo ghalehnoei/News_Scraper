@@ -38,6 +38,7 @@ SOURCE_NAMES = {
     "varzesh3": "ورزش3",
     "mashreghnews": "مشرق‌نیوز",
     "yjc": "باشگاه خبرنگاران جوان",
+    "iqna": "خبرگزاری ایکنا",
 }
 
 # Color codes for sources
@@ -54,6 +55,7 @@ SOURCE_COLORS = {
     "varzesh3": "#27ae60",   # سبز تیره
     "mashreghnews": "#d35400",  # نارنجی سوخته
     "yjc": "#2980b9",  # آبی تیره
+    "iqna": "#8e44ad",  # بنفش
 }
 
 # Persian names for normalized categories

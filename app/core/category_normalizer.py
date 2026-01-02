@@ -471,6 +471,115 @@ CATEGORY_MAPPINGS = {
         "بازی‌های آسیایی": "sports",
         "المپیک": "sports",
     },
+    "mashreghnews": {
+        # Politics
+        "سیاسی": "politics",
+        "سیاست": "politics",
+        "سیاست داخلی": "politics",
+        "سیاست خارجی": "politics",
+        "داخلی": "politics",
+        "خارجی": "international",
+        # Economy
+        "اقتصادی": "economy",
+        "اقتصاد": "economy",
+        "اقتصاد و تجارت": "economy",
+        "بازار": "economy",
+        "بورس": "economy",
+        # Society
+        "اجتماعی": "society",
+        "جامعه": "society",
+        "حوادث": "society",
+        "قضایی": "society",
+        "حقوقی": "society",
+        # International
+        "بین‌الملل": "international",
+        "بین الملل": "international",
+        "جهان": "international",
+        # Culture
+        "فرهنگی": "culture",
+        "فرهنگ": "culture",
+        "هنر": "culture",
+        "سینما": "culture",
+        "موسیقی": "culture",
+        "ادبیات": "culture",
+        # Sports
+        "ورزشی": "sports",
+        "ورزش": "sports",
+        "فوتبال": "sports",
+        # Science
+        "علمی": "science",
+        "علم": "science",
+        "پزشکی": "health",
+        "سلامت": "health",
+        # Technology
+        "فناوری": "technology",
+        "تکنولوژی": "technology",
+        "فناوری اطلاعات": "technology",
+        "IT": "technology",
+        "رایانه": "technology",
+        # Defense/Military
+        "دفاعی": "politics",
+        "نظامی": "politics",
+        "جهاد و مقاومت": "politics",
+        # Provinces
+        "استانها": "provinces",
+        "استان‌ها": "provinces",
+        "استان ها": "provinces",
+    },
+    "yjc": {
+        # Politics
+        "سیاسی": "politics",
+        "سیاست": "politics",
+        "سیاست داخلی": "politics",
+        "سیاست خارجی": "politics",
+        "داخلی": "politics",
+        "خارجی": "international",
+        # Economy
+        "اقتصادی": "economy",
+        "اقتصاد": "economy",
+        "اقتصاد و تجارت": "economy",
+        "بازار": "economy",
+        "بورس": "economy",
+        # Society
+        "اجتماعی": "society",
+        "جامعه": "society",
+        "حوادث": "society",
+        "قضایی": "society",
+        "حقوقی": "society",
+        # International
+        "بین‌الملل": "international",
+        "بین الملل": "international",
+        "جهان": "international",
+        # Culture
+        "فرهنگی": "culture",
+        "فرهنگ": "culture",
+        "هنر": "culture",
+        "سینما": "culture",
+        "موسیقی": "culture",
+        "ادبیات": "culture",
+        # Sports
+        "ورزشی": "sports",
+        "ورزش": "sports",
+        "فوتبال": "sports",
+        # Science
+        "علمی": "science",
+        "علم": "science",
+        "پزشکی": "health",
+        "سلامت": "health",
+        # Technology
+        "فناوری": "technology",
+        "تکنولوژی": "technology",
+        "فناوری اطلاعات": "technology",
+        "IT": "technology",
+        "رایانه": "technology",
+        # Defense/Military
+        "دفاعی": "politics",
+        "نظامی": "politics",
+        # Provinces
+        "استانها": "provinces",
+        "استان‌ها": "provinces",
+        "استان ها": "provinces",
+    },
     "kayhan": {
         # Politics
         "سیاسی": "politics",
@@ -585,7 +694,19 @@ def normalize_category(source: str, raw_category: Optional[str]) -> tuple[Option
         if raw_category.startswith("استان‌ها") or raw_category.startswith("استانها") or raw_category.startswith("استان ها"):
             normalized = "provinces"
     
-    # Default to "other" if no mapping found
+    # Special handling for Varzesh3: all categories default to "sports"
+    if not normalized and source == "varzesh3":
+        normalized = "sports"
+        logger.debug(
+            f"Varzesh3 category '{raw_category}' mapped to 'sports'",
+            extra={
+                "source": source,
+                "raw_category": raw_category,
+                "normalized_category": normalized,
+            }
+        )
+    
+    # Default to "other" if no mapping found (for other sources)
     if not normalized:
         normalized = "other"
         logger.warning(

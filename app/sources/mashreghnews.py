@@ -1,4 +1,4 @@
-"""Varzesh3 worker implementation."""
+"""Mashregh News worker implementation."""
 
 import asyncio
 import hashlib
@@ -6,11 +6,11 @@ import re
 from datetime import datetime
 from io import BytesIO
 from typing import Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import aiohttp
+import feedparser
 from bs4 import BeautifulSoup
-from lxml import etree
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,23 +23,23 @@ from app.storage.s3 import get_s3_session, init_s3
 from app.workers.base_worker import BaseWorker
 from app.workers.rate_limiter import RateLimiter
 
-logger = setup_logging(source="varzesh3")
+logger = setup_logging(source="mashreghnews")
 
-# News page URL (HTML scraping instead of RSS)
-VARZESH3_NEWS_URL = "https://www.varzesh3.com/news"
+# RSS feed URL
+MASHREGH_RSS_URL = "https://www.mashreghnews.ir/rss"
 
 # HTTP client settings
 HTTP_TIMEOUT = aiohttp.ClientTimeout(total=30, connect=10)
 HTTP_RETRIES = 3
 
 
-class Varzesh3Worker(BaseWorker):
-    """Worker for Varzesh3 RSS feed."""
+class MashreghNewsWorker(BaseWorker):
+    """Worker for Mashregh News RSS feed."""
 
     def __init__(self):
-        """Initialize Varzesh3 worker."""
-        super().__init__("varzesh3")
-        self.news_url = VARZESH3_NEWS_URL
+        """Initialize Mashregh News worker."""
+        super().__init__("mashreghnews")
+        self.rss_url = MASHREGH_RSS_URL
         self.http_session: Optional[aiohttp.ClientSession] = None
         self._s3_initialized = False
         
@@ -125,147 +125,92 @@ class Varzesh3Worker(BaseWorker):
         )
         return None
 
-    async def cleanup(self) -> None:
-        """Cleanup resources."""
-        if self.http_session and not self.http_session.closed:
-            try:
-                # Close connector connections
-                if self.http_session.connector:
-                    await self.http_session.connector.close()
-                # Close session with timeout
-                await asyncio.wait_for(self.http_session.close(), timeout=2.0)
-            except Exception as e:
-                self.logger.warning(f"Error closing HTTP session: {e}")
-            finally:
-                self.http_session = None
-
-    async def close_db(self) -> None:
-        """Close database connections."""
-        # AsyncSessionLocal handles connection pooling, no explicit close needed
-        pass
-
-    async def close_s3(self) -> None:
-        """Close S3 connections."""
-        # S3 session is managed by get_s3_session, no explicit close needed
-        pass
-
-    async def _parse_news_page(self) -> list[dict]:
+    async def _parse_rss_feed(self) -> list[dict]:
         """
-        Parse news page HTML and extract article links.
+        Parse RSS feed and extract article information.
 
         Returns:
             List of dictionaries containing article data
         """
-        content = await self._fetch_with_retry(self.news_url, request_type="article")
+        content = await self._fetch_with_retry(self.rss_url, request_type="rss")
         if content is None:
-            self.logger.error("Failed to fetch news page")
+            self.logger.error("Failed to fetch RSS feed")
             return []
 
         try:
-            # Try different encodings
-            html_content = None
-            for encoding in ['utf-8', 'utf-8-sig', 'windows-1256', 'iso-8859-1']:
-                try:
-                    html_content = content.decode(encoding)
-                    break
-                except UnicodeDecodeError:
-                    continue
-            
-            if html_content is None:
-                html_content = content.decode('utf-8', errors='ignore')
-
-            soup = BeautifulSoup(html_content, 'html.parser')
+            feed = feedparser.parse(content)
             items = []
             
-            # Find all news article links - they are in links with href starting with /news/
-            # Looking for links like: /news/2235628/قلی-زاده-درباره-شادی-گل-بهتر-است-چیزی-نگویم
-            news_links = soup.find_all('a', href=re.compile(r'/news/\d+/'))
-
-            self.logger.info(f"Found {len(news_links)} potential news links on page")
-            # Debug: show first few links
-            for i, link in enumerate(news_links[:3]):
-                self.logger.debug(f"Link {i+1}: {link.get('href')}")
-
-            # Use a set to avoid duplicates
-            seen_urls = set()
-            
-            for link in news_links:
-                href = link.get('href', '')
-                if not href or href in seen_urls:
-                    continue
-                
-                # Make absolute URL
-                if href.startswith('/'):
-                    article_url = f"https://www.varzesh3.com{href}"
-                elif href.startswith('http'):
-                    article_url = href
-                else:
-                    article_url = urljoin(self.news_url, href)
-                
-                # Normalize URL (remove query params and fragments)
-                article_url = article_url.split('?')[0].split('#')[0]
-                
-                if article_url in seen_urls:
-                    continue
-                
-                seen_urls.add(article_url)
-                
-                # Extract title from link text or nearby elements
-                title = link.get_text(strip=True)
-                if not title:
-                    # Try to find title in parent or sibling elements
-                    parent = link.parent
-                    if parent:
-                        title_elem = parent.find(['h1', 'h2', 'h3', 'h4', 'strong', 'span'])
-                        if title_elem:
-                            title = title_elem.get_text(strip=True)
-                
-                # Extract summary from paragraph near the link
-                summary = ""
-                # Look for paragraph in the same container
-                parent = link.parent
-                if parent:
-                    p_tag = parent.find('p')
-                    if p_tag:
-                        summary = p_tag.get_text(strip=True)
-                
-                # Extract image URL if available
-                image_url = ""
-                # Look for img tag in the same container or nearby
-                img_tag = link.find('img')
-                if not img_tag and parent:
-                    img_tag = parent.find('img')
-                if img_tag:
-                    img_src = img_tag.get('src') or img_tag.get('data-src') or img_tag.get('data-lazy-src', '')
-                    if img_src:
-                        if img_src.startswith('/'):
-                            image_url = f"https://www.varzesh3.com{img_src}"
-                        elif not img_src.startswith('http'):
-                            image_url = urljoin(self.news_url, img_src)
-                        else:
-                            image_url = img_src
-                
-                # Extract time from nearby elements (look for time indicators)
-                time_text = ""
-                time_elem = parent.find(string=re.compile(r'\d+\s*(دقیقه|ساعت|روز)\s*پیش'))
-                if time_elem:
-                    time_text = time_elem.strip()
-                
+            for entry in feed.entries:
                 item = {
-                    "title": title,
-                    "link": article_url,
-                    "description": summary,
-                    "pubDate": "",  # Will be extracted from article page
-                    "category": "",  # Will be extracted from article page
-                    "image_url": image_url,
+                    "title": entry.get("title", ""),
+                    "link": entry.get("link", ""),
+                    "description": entry.get("description", ""),
+                    "pubDate": "",
+                    "category": "",
+                    "image_url": "",
                 }
+                
+                # Extract published date
+                if hasattr(entry, "published_parsed") and entry.published_parsed:
+                    try:
+                        pub_date = datetime(*entry.published_parsed[:6])
+                        item["pubDate"] = pub_date.isoformat()
+                    except Exception as e:
+                        self.logger.debug(f"Could not parse published_parsed: {e}")
+                
+                # Fallback to published field
+                if not item["pubDate"]:
+                    for date_field in ["published", "updated", "pubDate"]:
+                        if entry.get(date_field):
+                            try:
+                                item["pubDate"] = datetime.strptime(
+                                    entry[date_field], "%a, %d %b %Y %H:%M:%S %z"
+                                ).isoformat()
+                                break
+                            except Exception:
+                                try:
+                                    item["pubDate"] = datetime.strptime(
+                                        entry[date_field], "%d %b %Y %H:%M:%S %z"
+                                    ).isoformat()
+                                    break
+                                except Exception:
+                                    pass
+                
+                # Extract category from tags, category, or dc:subject
+                category = ""
+                if hasattr(entry, "tags") and entry.tags:
+                    category = entry.tags[0].get("term", "")
+                elif hasattr(entry, "category"):
+                    category = entry.category
+                elif hasattr(entry, "dc_subject"):
+                    category = entry.dc_subject
+                
+                item["category"] = category
+                
+                # Extract image from enclosure
+                if hasattr(entry, "enclosures") and entry.enclosures:
+                    for enclosure in entry.enclosures:
+                        if enclosure.get("type", "").startswith("image/"):
+                            item["image_url"] = enclosure.get("url", "")
+                            break
+                
+                # Also check for media:content or media:thumbnail
+                if not item["image_url"]:
+                    if hasattr(entry, "media_content") and entry.media_content:
+                        for media in entry.media_content:
+                            if media.get("type", "").startswith("image/"):
+                                item["image_url"] = media.get("url", "")
+                                break
+                    elif hasattr(entry, "media_thumbnail") and entry.media_thumbnail:
+                        item["image_url"] = entry.media_thumbnail[0].get("url", "")
                 
                 items.append(item)
             
-            self.logger.info(f"Found {len(items)} articles from news page")
+            self.logger.info(f"Parsed {len(items)} items from RSS feed")
             return items
         except Exception as e:
-            self.logger.error(f"Error parsing news page: {e}", exc_info=True)
+            self.logger.error(f"Error parsing RSS feed: {e}", exc_info=True)
             return []
 
     async def _check_url_exists(self, url: str, db: AsyncSession) -> bool:
@@ -287,7 +232,7 @@ class Varzesh3Worker(BaseWorker):
         # Since we always store normalized URLs, check normalized URL first
         result = await db.execute(
             select(News).where(
-                (News.source == "varzesh3") & 
+                (News.source == "mashreghnews") & 
                 (News.url == normalized_url)
             )
         )
@@ -297,7 +242,7 @@ class Varzesh3Worker(BaseWorker):
         if not existing:
             result = await db.execute(
                 select(News).where(
-                    (News.source == "varzesh3") & 
+                    (News.source == "mashreghnews") & 
                     (News.url == url)
                 )
             )
@@ -308,7 +253,7 @@ class Varzesh3Worker(BaseWorker):
         if not existing:
             result = await db.execute(
                 select(News).where(
-                    (News.source == "varzesh3") & 
+                    (News.source == "mashreghnews") & 
                     (News.url.like(f"{normalized_url}%"))
                 )
             )
@@ -357,24 +302,39 @@ class Varzesh3Worker(BaseWorker):
 
             # Extract title
             title = ""
-            h1_tag = soup.find("h1")
-            if h1_tag:
-                title = h1_tag.get_text(strip=True)
-            else:
-                # Fallback to meta title
+            # Priority 1: h1 within article tag
+            article_tag_for_title = soup.find("article")
+            if article_tag_for_title:
+                h1_tag = article_tag_for_title.find("h1")
+                if h1_tag:
+                    title = h1_tag.get_text(strip=True)
+            
+            # Priority 2: Any h1 on the page
+            if not title:
+                h1_tag = soup.find("h1")
+                if h1_tag:
+                    title = h1_tag.get_text(strip=True)
+            
+            # Priority 3: og:title meta tag
+            if not title:
                 meta_title = soup.find("meta", attrs={"property": "og:title"})
                 if meta_title and meta_title.get("content"):
                     title = meta_title["content"]
-                else:
-                    title_tag = soup.find("title")
-                    if title_tag:
-                        title = title_tag.get_text(strip=True)
+            
+            # Priority 4: title tag (remove site name suffix)
+            if not title:
+                title_tag = soup.find("title")
+                if title_tag:
+                    title = title_tag.get_text(strip=True)
+                    # Remove " - مشرق نیوز" suffix if present
+                    if " - مشرق نیوز" in title:
+                        title = title.replace(" - مشرق نیوز", "").strip()
 
-            # Extract article body
+            # Extract article body using CSS selectors
             body_html = ""
             article_tag = None
             
-            # Try multiple selectors for Varzesh3
+            # Try CSS selectors
             article_selectors = [
                 "article",
                 ".article-body",
@@ -409,7 +369,7 @@ class Varzesh3Worker(BaseWorker):
                     self.logger.debug(f"Error with selector {selector}: {e}", extra={"article_url": url})
                     continue
             
-            # If still not found, try to find the main content area by looking for divs with substantial text
+            # Try to find the main content area by looking for divs with substantial text
             if not article_tag:
                 # Find h1 first
                 h1_tag = soup.find("h1")
@@ -425,40 +385,78 @@ class Varzesh3Worker(BaseWorker):
                                 self.logger.debug("Found article body by searching after h1", extra={"article_url": url})
                                 break
                         current = current.next_sibling if hasattr(current, 'next_sibling') else None
-                
-                # If still not found, try finding parent of h1 and look for content divs
-                if not article_tag and h1_tag:
-                    parent = h1_tag.parent
-                    if parent:
-                        # Look for divs with substantial text in the parent
-                        content_divs = parent.find_all('div', recursive=False)
-                        for div in content_divs:
-                            text_content = div.get_text(strip=True)
-                            if len(text_content) > 200:
-                                article_tag = div
-                                self.logger.debug("Found article body in parent container", extra={"article_url": url})
-                                break
+                    
+                    # If still not found, try finding parent of h1 and look for content divs
+                    if not article_tag and h1_tag:
+                        parent = h1_tag.parent
+                        if parent:
+                            # Look for divs with substantial text in the parent
+                            content_divs = parent.find_all('div', recursive=False)
+                            for div in content_divs:
+                                text_content = div.get_text(strip=True)
+                                if len(text_content) > 200:
+                                    article_tag = div
+                                    self.logger.debug("Found article body in parent container", extra={"article_url": url})
+                                    break
 
             if article_tag:
                 # Remove script and style tags
                 for tag in article_tag.find_all(["script", "style", "iframe"]):
                     tag.decompose()
                 
-                # Remove specific unwanted classes for Varzesh3
+                # Remove specific unwanted classes
                 unwanted_classes = [
                     "ad", "advertisement", "social", "share",
-                    "short_link_box",
-                    "noprint",
-                    "zxc_mb",
-                    "comment",
-                    "comments",
-                    "related",
-                    "sidebar"
+                    "comment", "comments", "related", "sidebar"
                 ]
                 
                 # Remove elements with unwanted classes
                 for tag in article_tag.find_all(class_=lambda x: x and any(skip in x.lower() for skip in unwanted_classes)):
                     tag.decompose()
+                
+                # Remove advertisement links (links containing /redirect/ads/)
+                for ad_link in article_tag.find_all("a", href=lambda x: x and "/redirect/ads/" in x):
+                    # Remove the entire parent element (usually figure or listitem)
+                    parent = ad_link.find_parent()
+                    if parent:
+                        parent.decompose()
+                
+                # Remove sections with headings like "اخبار مرتبط", "برچسب‌ها", etc.
+                unwanted_headings = ["اخبار مرتبط", "برچسب", "برچسب‌ها", "نظر شما", "این مطالب را از دست ندهید"]
+                for heading in article_tag.find_all(["h2", "h3"]):
+                    heading_text = heading.get_text(strip=True)
+                    if any(unwanted in heading_text for unwanted in unwanted_headings):
+                        # Find the parent container (usually a div or section)
+                        parent = heading.find_parent()
+                        if parent:
+                            # If the parent contains the heading and its siblings, remove the parent
+                            # Otherwise, remove the heading and its following siblings
+                            # Check if parent is a direct child of article_tag
+                            if parent.parent == article_tag or parent in article_tag.descendants:
+                                # Try to find the container div that holds this section
+                                container = heading.find_parent("div")
+                                if container and container != article_tag:
+                                    # Check if this container seems to be a section (has list or multiple elements)
+                                    if container.find("ul") or container.find("ol") or len(container.find_all()) > 2:
+                                        container.decompose()
+                                        continue
+                                # Otherwise, remove heading and following siblings until next heading
+                                current = heading
+                                while current:
+                                    next_sibling = current.next_sibling
+                                    if hasattr(current, 'decompose'):
+                                        current.decompose()
+                                    current = next_sibling
+                                    # Stop if we hit another heading or reach end
+                                    if not current:
+                                        break
+                                    if hasattr(current, 'name'):
+                                        if current.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+                                            break
+                                        if current.name == 'div':
+                                            # Check if this div contains another heading
+                                            if current.find(["h1", "h2", "h3", "h4", "h5", "h6"]):
+                                                break
                 
                 # Remove content after "انتهای پیام" (end of message marker)
                 end_marker = article_tag.find(string=lambda text: text and "انتهای پیام" in text)
@@ -499,200 +497,127 @@ class Varzesh3Worker(BaseWorker):
                     summary = first_p.get_text(strip=True)[:500]
 
             # Extract category and published date
-            category = "ورزشی"  # Varzesh3 is a sports news website, so all articles are sports
+            category = ""
             published_at = ""
 
-            # Extract published date using XPath with multiple fallback options
+            # Extract image
+            image_url = ""
+            
+            # Priority 1: XPath //*[@id="item"]/div[3]/figure/img
             try:
-                # Parse HTML with lxml for XPath support
-                # Use bytes content directly - lxml will handle encoding
+                from lxml import etree
                 parser = etree.HTMLParser()
                 tree = etree.fromstring(content, parser=parser)
-                
-                # Try multiple XPath patterns to handle different page structures
-                time_xpaths = [
-                    '//*[@id="v3-app"]/div[1]/div[1]/div[1]/div[2]/div[2]/div[1]/div[1]/span[2]',  # New structure
-                    '//*[@id="v3-app"]/div[1]/div/div/div[2]/div[3]/div[1]/div[1]/span[2]',  # Old structure
-                ]
-                
-                time_text = None
-                for time_xpath in time_xpaths:
-                    time_elements = tree.xpath(time_xpath)
-                    if time_elements and len(time_elements) > 0:
-                        # Get all text content from the element (including text in child elements)
-                        time_text = ''.join(time_elements[0].itertext()).strip()
-                        if time_text and re.search(r'\d{1,2}\s*(دی|بهمن|اسفند|فروردین|اردیبهشت|خرداد|تیر|مرداد|شهریور|مهر|آبان|آذر)\s*\d{4}\s*ساعت', time_text):
-                            self.logger.debug(f"Found time text from XPath {time_xpath}: {time_text}", extra={"article_url": url})
+                xpath_result = tree.xpath('//*[@id="item"]/div[3]/figure/img')
+                if xpath_result and len(xpath_result) > 0:
+                    img_elem = xpath_result[0]
+                    for attr in ["src", "data-src", "data-lazy-src", "data-original"]:
+                        attr_value = img_elem.get(attr)
+                        if attr_value:
+                            image_url = attr_value
+                            self.logger.debug(f'Found image from XPath //*[@id="item"]/div[3]/figure/img: {image_url}', extra={"article_url": url})
                             break
-                        else:
-                            time_text = None
-                
-                if time_text:
-                    # Parse the Persian date from the time text
-                    # Format examples: "12 دی 1404 ساعت 00:10" or "کد: 2235628 | 12 دی 1404 ساعت 00:10 | 7.2K بازدید"
-                    date_match = re.search(r'(\d{1,2})\s*(دی|بهمن|اسفند|فروردین|اردیبهشت|خرداد|تیر|مرداد|شهریور|مهر|آبان|آذر)\s*(\d{4})\s*ساعت\s*(\d{1,2}):(\d{2})', time_text)
-                    if date_match:
-                        day, month_name, year, hour, minute = date_match.groups()
-                        self.logger.debug(f"Date match groups: {date_match.groups()}", extra={"article_url": url})
-
-                        # Convert Persian month to number
-                        persian_months = {
-                            'فروردین': 1, 'اردیبهشت': 2, 'خرداد': 3, 'تیر': 4, 'مرداد': 5, 'شهریور': 6,
-                            'مهر': 7, 'آبان': 8, 'آذر': 9, 'دی': 10, 'بهمن': 11, 'اسفند': 12
-                        }
-
-                        month = persian_months.get(month_name, 1)
-                        self.logger.debug(f"Month conversion: {month_name} -> {month}", extra={"article_url": url})
-
-                        # Convert to Gregorian date using jdatetime library for accurate conversion
-                        try:
-                            import jdatetime
-                            from dateutil.tz import gettz
-                            
-                            # Create Persian datetime object
-                            persian_dt = jdatetime.datetime(
-                                year=int(year),
-                                month=month,
-                                day=int(day),
-                                hour=int(hour),
-                                minute=int(minute)
-                            )
-                            
-                            # Convert to Gregorian datetime
-                            gregorian_dt = persian_dt.togregorian()
-                            
-                            # Add Tehran timezone since the time is already in Iran timezone
-                            tehran_tz = gettz('Asia/Tehran')
-                            gregorian_dt = gregorian_dt.replace(tzinfo=tehran_tz)
-                            
-                            # Format as ISO string with timezone offset
-                            # Get timezone offset
-                            offset = gregorian_dt.utcoffset()
-                            if offset:
-                                total_seconds = int(offset.total_seconds())
-                                hours = total_seconds // 3600
-                                minutes = (total_seconds % 3600) // 60
-                                offset_str = f"{hours:+03d}:{minutes:02d}"
-                            else:
-                                offset_str = "+03:30"  # Default to Iran timezone
-                            
-                            published_at = gregorian_dt.strftime("%Y-%m-%dT%H:%M:%S") + offset_str
-                            
-                            self.logger.debug(f"Parsed Persian date: {year}/{month}/{day} {hour}:{minute} -> {published_at}", extra={"article_url": url})
-                        except Exception as e:
-                            self.logger.debug(f"Error parsing Persian date: {e}", extra={"article_url": url})
-                    else:
-                        self.logger.debug(f"No date match found in time text: {time_text}", extra={"article_url": url})
-                else:
-                    self.logger.debug("Time element not found using any XPath", extra={"article_url": url})
             except Exception as e:
-                self.logger.debug(f"Error extracting time using XPath: {e}", extra={"article_url": url})
-
-            # Extract main image - Priority 1: og:image meta tag
-            image_url = ""
-            og_image = soup.find("meta", attrs={"property": "og:image"})
-            if og_image and og_image.get("content"):
-                img_src = og_image["content"]
-                # Make absolute URL if relative
-                if img_src.startswith("/"):
-                    parsed_url = urlparse(url)
-                    image_url = f"{parsed_url.scheme}://{parsed_url.netloc}{img_src}"
-                elif not img_src.startswith("http"):
-                    image_url = urljoin(url, img_src)
-                else:
-                    image_url = img_src
-                self.logger.debug(f"Found image from og:image: {image_url}", extra={"article_url": url})
+                self.logger.debug(f"Error extracting image using XPath: {e}", extra={"article_url": url})
             
-            # Helper function to make absolute URL
-            def make_absolute_url(src: str) -> str:
-                """Convert relative URL to absolute URL."""
-                if not src:
-                    return ""
-                if src.startswith("http://") or src.startswith("https://"):
-                    return src
-                elif src.startswith("//"):
-                    parsed_url = urlparse(url)
-                    return f"{parsed_url.scheme}:{src}"
-                elif src.startswith("/"):
-                    parsed_url = urlparse(url)
-                    return f"{parsed_url.scheme}://{parsed_url.netloc}{src}"
-                else:
-                    return urljoin(url, src)
-            
-            # Priority 2: Look for main article image (usually the first large image after title)
+            # Priority 2: og:image
             if not image_url:
-                # Find the main image which is usually right after the title and summary
-                # Look for img tags in the content area
-                content_area = soup.find("div", class_=lambda x: x and ("content" in str(x).lower() or "news" in str(x).lower()))
-                if content_area:
-                    images = content_area.find_all("img")
-                    for img in images:
-                        src = img.get("src") or img.get("data-src") or img.get("data-lazy-src") or img.get("data-original", "")
-                        if src:
-                            # Skip small images, logos, icons, ads
-                            src_lower = src.lower()
-                            if any(skip in src_lower for skip in ["logo", "icon", "avatar", "ad", "banner", "sponsor", "social", "thumb"]):
-                                continue
-                            # Check if this looks like a main article image
-                            if "/news/" in src or "/files/" in src or "/images/" in src:
-                                image_url = make_absolute_url(src)
-                                self.logger.debug(f"Found main article image: {image_url}", extra={"article_url": url})
-                                break
-
-            # Priority 3: Look for image in article content
-            if not image_url and article_tag:
-                # Try to find first image in article_tag
-                images = article_tag.find_all("img")
-                for img in images:
-                    src = img.get("src") or img.get("data-src") or img.get("data-lazy-src") or img.get("data-original", "")
-                    if src:
-                        # Skip small images, logos, icons, ads
-                        src_lower = src.lower()
-                        if any(skip in src_lower for skip in ["logo", "icon", "avatar", "ad", "banner", "sponsor"]):
+                og_image = soup.find("meta", attrs={"property": "og:image"})
+                if og_image and og_image.get("content"):
+                    image_url = og_image["content"]
+                    self.logger.debug(f"Found image from og:image: {image_url}", extra={"article_url": url})
+            
+            # Priority 3: Image within article > figure > img (first figure, not ads)
+            if not image_url:
+                article_elem = soup.find("article")
+                if article_elem:
+                    # Find all figures, but skip those with ad links
+                    figures = article_elem.find_all("figure")
+                    for figure_tag in figures:
+                        # Skip if this figure contains an ad link
+                        ad_link = figure_tag.find("a", href=lambda x: x and "/redirect/ads/" in x)
+                        if ad_link:
                             continue
-                        # Make absolute URL
-                        image_url = make_absolute_url(src)
-                        self.logger.debug(f"Found image in article content: {image_url}", extra={"article_url": url})
+                        
+                        img_tag = figure_tag.find("img")
+                        if img_tag:
+                            for attr in ["src", "data-src", "data-lazy-src", "data-original"]:
+                                if img_tag.get(attr):
+                                    image_url = img_tag[attr]
+                                    self.logger.debug(f"Found image from article figure: {image_url}", extra={"article_url": url})
+                                    break
+                        if image_url:
+                            break
+            
+            # Priority 3: First image in article content (not in ad links)
+            if not image_url and article_tag:
+                all_imgs = article_tag.find_all("img")
+                for img_tag in all_imgs:
+                    # Skip if image is inside an ad link
+                    parent_link = img_tag.find_parent("a", href=lambda x: x and "/redirect/ads/" in x)
+                    if parent_link:
+                        continue
+                    
+                    for attr in ["src", "data-src", "data-lazy-src", "data-original"]:
+                        if img_tag.get(attr):
+                            src = img_tag[attr]
+                            # Skip if it's a logo or barcode
+                            if "logo" in src.lower() or "barcode" in src.lower():
+                                continue
+                            image_url = src
+                            self.logger.debug(f"Found image from article content: {image_url}", extra={"article_url": url})
+                            break
+                    if image_url:
                         break
             
-            # Priority 3: Look for any large image on the page
+            # Priority 4: Any large image on the page from CDN (not ads)
             if not image_url:
                 all_images = soup.find_all("img")
                 for img in all_images:
-                    src = img.get("src") or img.get("data-src") or img.get("data-lazy-src") or img.get("data-original", "")
-                    if src:
-                        src_lower = src.lower()
-                        # Skip small images, logos, icons, ads
-                        if any(skip in src_lower for skip in ["logo", "icon", "avatar", "ad", "banner", "sponsor", "social"]):
+                    # Skip if image is inside an ad link
+                    parent_link = img.find_parent("a", href=lambda x: x and "/redirect/ads/" in x)
+                    if parent_link:
+                        continue
+                    
+                    src = img.get("src") or img.get("data-src") or img.get("data-lazy-src") or img.get("data-original")
+                    if src and "cdn.mashreghnews.ir" in src:
+                        # Skip logos and barcodes
+                        if "logo" in src.lower() or "barcode" in src.lower():
                             continue
-                        # Check image dimensions if available
+                        # Check if it's a reasonable size (not an icon)
                         width = img.get("width")
                         height = img.get("height")
                         if width and height:
                             try:
-                                w = int(width)
-                                h = int(height)
-                                if w > 200 and h > 200:  # Large enough to be main image
-                                    image_url = make_absolute_url(src)
-                                    self.logger.debug(f"Found large image: {image_url} ({w}x{h})", extra={"article_url": url})
+                                if int(width) > 200 and int(height) > 200:
+                                    image_url = src
+                                    self.logger.debug(f"Found large image from CDN: {image_url}", extra={"article_url": url})
                                     break
-                            except (ValueError, TypeError):
+                            except ValueError:
                                 pass
                         else:
-                            # If no dimensions, check if URL looks like main image
-                            if "/news/" in src or "/image/" in src:
-                                image_url = make_absolute_url(src)
-                                self.logger.debug(f"Found potential main image: {image_url}", extra={"article_url": url})
-                                break
+                            # If no dimensions, assume it's a main image if it's from CDN
+                            image_url = src
+                            self.logger.debug(f"Found image from CDN (no dimensions): {image_url}", extra={"article_url": url})
+                            break
 
-            self.logger.debug("Final extracted data - published_at: " + str(published_at) + ", category: " + category, extra={"article_url": url})
+            # Make image URL absolute if relative
+            if image_url and not image_url.startswith("http"):
+                image_url = urljoin(url, image_url)
+            
+            # Remove query string from image URL to avoid issues with presigned URLs
+            # The query string (like ?ts=...) is not needed for downloading
+            if image_url:
+                parsed = urlparse(image_url)
+                # Reconstruct URL without query string and fragment
+                image_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', '', ''))
 
             return {
                 "title": title,
                 "body_html": body_html,
                 "summary": summary,
-                "category": category,
                 "image_url": image_url,
+                "category": category,
                 "published_at": published_at,
             }
         except Exception as e:
@@ -799,23 +724,33 @@ class Varzesh3Worker(BaseWorker):
                     BytesIO(image_data),
                     settings.s3_bucket,
                     s3_key,
-                    ExtraArgs={"ContentType": f"image/{ext[1:]}"}
+                    ExtraArgs={"ContentType": f"image/{ext[1:]}" if ext != '.webp' else "image/webp"}
                 )
             
-            # Return full S3 URL or path
-            s3_url = f"{settings.s3_endpoint}/{settings.s3_bucket}/{s3_key}"
-            self.logger.debug(f"Uploaded image to S3: {s3_url}", extra={"article_url": url})
-            return s3_key  # Return just the key, not full URL
+            # Generate presigned URL
+            from app.storage.s3 import generate_presigned_url
+            presigned_url = await generate_presigned_url(s3_key)
+            
+            if presigned_url:
+                self.logger.info(f"Successfully uploaded image to S3: {s3_key}", extra={"article_url": url})
+                return presigned_url
+            else:
+                # Fallback to S3 URL format
+                s3_url = f"{settings.s3_endpoint}/{settings.s3_bucket}/{s3_key}"
+                self.logger.info(f"Uploaded image to S3 (no presigned URL): {s3_url}", extra={"article_url": url})
+                return s3_url
         except Exception as e:
-            self.logger.error(f"Error uploading image to S3: {e}", exc_info=True, extra={"article_url": url})
+            self.logger.error(f"Error uploading image to S3: {e}", extra={"article_url": url}, exc_info=True)
             return None
 
-    async def _save_article(self, news_item: dict, article_content: dict, s3_image_url: str) -> None:
+    async def _save_article(
+        self, rss_item: dict, article_content: dict, s3_image_url: str
+    ) -> None:
         """
         Save article to database.
 
         Args:
-            news_item: News item data from HTML page
+            rss_item: RSS feed item data
             article_content: Extracted article content
             s3_image_url: S3 URL for the image
         """
@@ -823,28 +758,28 @@ class Varzesh3Worker(BaseWorker):
             try:
                 # Check if URL already exists (with source filter)
                 # Logging is handled inside _check_url_exists
-                if await self._check_url_exists(news_item["link"], db):
+                if await self._check_url_exists(rss_item["link"], db):
                     return
 
                 # Get raw category
-                raw_category = article_content.get("category") or news_item.get("category", "")
+                raw_category = article_content.get("category") or rss_item.get("category", "")
                 
                 # Normalize category
-                normalized_category, preserved_raw_category = normalize_category("varzesh3", raw_category)
+                normalized_category, preserved_raw_category = normalize_category("mashreghnews", raw_category)
                 
                 # Create news article
                 # Use published_at from article_content (extracted from page) if available,
-                # otherwise fall back to news_item pubDate
-                published_at = article_content.get("published_at") or news_item.get("pubDate", "")
+                # otherwise fall back to rss_item pubDate
+                published_at = article_content.get("published_at") or rss_item.get("pubDate", "")
                 
                 # Normalize URL for storage (remove trailing slash and query parameters)
-                normalized_url = news_item["link"].rstrip('/').split('?')[0].split('#')[0]
+                normalized_url = rss_item["link"].rstrip('/').split('?')[0].split('#')[0]
                 
                 news = News(
-                    source="varzesh3",
-                    title=article_content.get("title") or news_item["title"],
+                    source="mashreghnews",
+                    title=article_content.get("title") or rss_item["title"],
                     body_html=article_content.get("body_html", ""),
-                    summary=article_content.get("summary") or news_item.get("description", ""),
+                    summary=article_content.get("summary") or rss_item.get("description", ""),
                     url=normalized_url,  # Store normalized URL
                     published_at=published_at,
                     image_url=s3_image_url,
@@ -857,12 +792,12 @@ class Varzesh3Worker(BaseWorker):
                 
                 self.logger.info(
                     f"Successfully saved article: {news.title[:50]}...",
-                    extra={"article_url": news_item["link"]}
+                    extra={"article_url": rss_item["link"]}
                 )
             except Exception as e:
                 self.logger.error(
                     f"Error saving article to database: {e}",
-                    extra={"article_url": news_item["link"]},
+                    extra={"article_url": rss_item["link"]},
                     exc_info=True
                 )
                 await db.rollback()
@@ -870,85 +805,88 @@ class Varzesh3Worker(BaseWorker):
 
     async def fetch_news(self) -> None:
         """
-        Fetch news from Varzesh3 RSS feed.
+        Fetch news from Mashregh News RSS feed.
         """
         if not self.running:
             return
 
         try:
-            # Parse news page HTML
-            news_items = await self._parse_news_page()
+            # Parse RSS feed
+            rss_items = await self._parse_rss_feed()
             
-            if not news_items:
-                self.logger.warning("No items found on news page")
+            if not rss_items:
+                self.logger.warning("No items found in RSS feed")
                 return
 
-            self.logger.info(f"Processing {len(news_items)} articles from news page")
+            self.logger.info(f"Processing {len(rss_items)} articles from RSS feed")
 
             # Process each article
-            for idx, news_item in enumerate(news_items, 1):
+            for idx, rss_item in enumerate(rss_items, 1):
                 if not self.running:
                     self.logger.info("Worker stopped, cancelling fetch operation")
                     break
 
                 self.logger.info(
-                    f"Processing article {idx}/{len(news_items)}: {news_item['title'][:50]}...",
-                    extra={"article_url": news_item["link"]}
+                    f"Processing article {idx}/{len(rss_items)}: {rss_item['title'][:50]}...",
+                    extra={"article_url": rss_item["link"]}
                 )
 
                 # Quick check if URL already exists before extracting content
                 async with AsyncSessionLocal() as quick_db:
-                    if await self._check_url_exists(news_item["link"], quick_db):
+                    if await self._check_url_exists(rss_item["link"], quick_db):
                         self.logger.debug(
-                            f"Skipping article (already exists): {news_item['title'][:50]}...",
-                            extra={"article_url": news_item["link"]}
+                            f"Skipping article (already exists): {rss_item['title'][:50]}...",
+                            extra={"article_url": rss_item["link"]}
                         )
                         continue
 
                 # Extract article content
-                article_content = await self._extract_article_content(news_item["link"])
+                article_content = await self._extract_article_content(rss_item["link"])
                 if not article_content:
                     self.logger.warning(
-                        f"Failed to extract content for article: {news_item['link']}",
-                        extra={"article_url": news_item["link"]}
+                        f"Failed to extract content for article: {rss_item['link']}",
+                        extra={"article_url": rss_item["link"]}
                     )
                     continue
 
                 # Download and upload image if available
-                # Priority: article_content (from HTML) > news_item image_url
+                # Priority: article_content (from HTML) > RSS enclosure > RSS image_url
                 s3_image_url = ""
-                image_url = article_content.get("image_url") or news_item.get("image_url", "")
+                image_url = article_content.get("image_url") or rss_item.get("image_url", "")
+                if not image_url and rss_item.get("image_url"):
+                    # Try RSS image_url as fallback
+                    image_url = rss_item.get("image_url")
                 if image_url:
                     self.logger.debug(
                         f"Processing main image for article: {image_url}",
-                        extra={"article_url": news_item["link"]}
+                        extra={"article_url": rss_item["link"]}
                     )
                     image_data = await self._download_image(image_url)
                     if image_data:
                         self.logger.debug(
                             f"Downloaded main image ({len(image_data)} bytes), uploading to S3...",
-                            extra={"article_url": news_item["link"]}
+                            extra={"article_url": rss_item["link"]}
                         )
                         s3_image_url = await self._upload_image_to_s3(
-                            image_data, self.source_name, news_item["link"]
+                            image_data, self.source_name, rss_item["link"]
                         )
                         if s3_image_url:
                             self.logger.info(
                                 f"Successfully uploaded main image to S3: {s3_image_url}",
-                                extra={"article_url": news_item["link"]}
+                                extra={"article_url": rss_item["link"]}
                             )
 
                 # Save article to database
                 try:
-                    await self._save_article(news_item, article_content, s3_image_url)
+                    await self._save_article(rss_item, article_content, s3_image_url)
                     self.logger.info(
-                        f"Successfully processed article: {news_item['title'][:50]}...",
-                        extra={"article_url": news_item["link"]}
+                        f"Successfully processed article: {rss_item['title'][:50]}...",
+                        extra={"article_url": rss_item["link"]}
                     )
                 except Exception as e:
                     self.logger.error(
                         f"Error saving article: {e}",
-                        extra={"article_url": news_item["link"]},
+                        extra={"article_url": rss_item["link"]},
                         exc_info=True
                     )
 

@@ -21,6 +21,9 @@ from app.sources.varzesh3 import Varzesh3Worker
 from app.sources.mashreghnews import MashreghNewsWorker
 from app.sources.yjc import YJCWorker
 from app.sources.iqna import IQNAWorker
+from app.sources.hamshahri import HamshahriWorker
+from app.sources.donyaeqtesad import DonyaEqtesadWorker
+from app.sources.snn import SNNWorker
 
 
 async def main() -> None:
@@ -59,6 +62,12 @@ async def main() -> None:
         worker = YJCWorker()
     elif settings.worker_source == "iqna":
         worker = IQNAWorker()
+    elif settings.worker_source == "hamshahri":
+        worker = HamshahriWorker()
+    elif settings.worker_source == "donyaeqtesad":
+        worker = DonyaEqtesadWorker()
+    elif settings.worker_source == "snn":
+        worker = SNNWorker()
     else:
         # Fallback to base worker for unknown sources
         worker = BaseWorker(settings.worker_source)

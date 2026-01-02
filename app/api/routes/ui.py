@@ -39,6 +39,9 @@ SOURCE_NAMES = {
     "mashreghnews": "مشرق‌نیوز",
     "yjc": "باشگاه خبرنگاران جوان",
     "iqna": "خبرگزاری ایکنا",
+    "hamshahri": "همشهری‌آنلاین",
+    "donyaeqtesad": "دنیای اقتصاد",
+    "snn": "خبرگزاری دانشجو",
 }
 
 # Color codes for sources
@@ -56,6 +59,9 @@ SOURCE_COLORS = {
     "mashreghnews": "#d35400",  # نارنجی سوخته
     "yjc": "#2980b9",  # آبی تیره
     "iqna": "#8e44ad",  # بنفش
+    "hamshahri": "#e67e22", # نارنجی تیره
+    "donyaeqtesad": "#16a085", # فیروزه‌ای
+    "snn": "#e74c3c", # قرمز
 }
 
 # Persian names for normalized categories

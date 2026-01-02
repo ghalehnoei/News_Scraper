@@ -1,4 +1,4 @@
-"""IQNA (International Quran News Agency) worker implementation."""
+"""Donya-e-Eqtesad (World Economy) worker implementation."""
 
 import asyncio
 import hashlib
@@ -23,23 +23,23 @@ from app.storage.s3 import get_s3_session, init_s3
 from app.workers.base_worker import BaseWorker
 from app.workers.rate_limiter import RateLimiter
 
-logger = setup_logging(source="iqna")
+logger = setup_logging(source="donyaeqtesad")
 
 # RSS feed URL
-IQNA_RSS_URL = "https://iqna.ir/fa/rss/allnews"
+DONYA_EQTESAD_RSS_URL = "https://donya-e-eqtesad.com/feeds/"
 
 # HTTP client settings
 HTTP_TIMEOUT = aiohttp.ClientTimeout(total=30, connect=10)
 HTTP_RETRIES = 3
 
 
-class IQNAWorker(BaseWorker):
-    """Worker for IQNA (International Quran News Agency) RSS feed."""
+class DonyaEqtesadWorker(BaseWorker):
+    """Worker for Donya-e-Eqtesad RSS feed."""
 
     def __init__(self):
-        """Initialize IQNA worker."""
-        super().__init__("iqna")
-        self.rss_url = IQNA_RSS_URL
+        """Initialize Donya-e-Eqtesad worker."""
+        super().__init__("donyaeqtesad")
+        self.rss_url = DONYA_EQTESAD_RSS_URL
         self.http_session: Optional[aiohttp.ClientSession] = None
         self._s3_initialized = False
         
@@ -145,11 +145,27 @@ class IQNAWorker(BaseWorker):
                 item = {
                     "title": entry.get("title", ""),
                     "link": entry.get("link", ""),
-                    "description": entry.get("description", ""),
+                    "description": "",
                     "pubDate": "",
                     "category": "",
                     "image_url": "",
                 }
+                
+                # Extract description (may contain HTML)
+                description = entry.get("description", "")
+                if description:
+                    # Parse HTML to extract text and image
+                    desc_soup = BeautifulSoup(description, 'html.parser')
+                    # Extract image from description
+                    img_tag = desc_soup.find("img")
+                    if img_tag and img_tag.get("src"):
+                        item["image_url"] = img_tag["src"]
+                    # Extract text description
+                    div_tag = desc_soup.find("div")
+                    if div_tag:
+                        item["description"] = div_tag.get_text(strip=True)
+                    else:
+                        item["description"] = desc_soup.get_text(strip=True)
                 
                 # Extract published date
                 if hasattr(entry, "published_parsed") and entry.published_parsed:
@@ -165,13 +181,13 @@ class IQNAWorker(BaseWorker):
                         if entry.get(date_field):
                             try:
                                 item["pubDate"] = datetime.strptime(
-                                    entry[date_field], "%d %b %Y %H:%M:%S %z"
+                                    entry[date_field], "%a, %d %b %Y %H:%M:%S %z"
                                 ).isoformat()
                                 break
                             except Exception:
                                 try:
                                     item["pubDate"] = datetime.strptime(
-                                        entry[date_field], "%a, %d %b %Y %H:%M:%S %z"
+                                        entry[date_field], "%a, %d %b %Y %H:%M:%S %Z"
                                     ).isoformat()
                                     break
                                 except Exception:
@@ -187,23 +203,6 @@ class IQNAWorker(BaseWorker):
                     category = entry.dc_subject
                 
                 item["category"] = category
-                
-                # Extract image from enclosure
-                if hasattr(entry, "enclosures") and entry.enclosures:
-                    for enclosure in entry.enclosures:
-                        if enclosure.get("type", "").startswith("image/"):
-                            item["image_url"] = enclosure.get("url", "")
-                            break
-                
-                # Also check for media:content or media:thumbnail
-                if not item["image_url"]:
-                    if hasattr(entry, "media_content") and entry.media_content:
-                        for media in entry.media_content:
-                            if media.get("type", "").startswith("image/"):
-                                item["image_url"] = media.get("url", "")
-                                break
-                    elif hasattr(entry, "media_thumbnail") and entry.media_thumbnail:
-                        item["image_url"] = entry.media_thumbnail[0].get("url", "")
                 
                 items.append(item)
             
@@ -225,35 +224,30 @@ class IQNAWorker(BaseWorker):
             True if URL exists, False otherwise
         """
         # Normalize URL: remove trailing slash and query parameters for comparison
-        # This must match the normalization in _save_article
         normalized_url = url.rstrip('/').split('?')[0].split('#')[0]
         
-        # Check with source filter to avoid conflicts with other sources
-        # Since we always store normalized URLs, check normalized URL first
+        # Check with source filter
         result = await db.execute(
             select(News).where(
-                (News.source == "iqna") & 
+                (News.source == "donyaeqtesad") & 
                 (News.url == normalized_url)
             )
         )
         existing = result.scalar_one_or_none()
         
-        # If not found with normalized URL, check original URL (for backward compatibility)
         if not existing:
             result = await db.execute(
                 select(News).where(
-                    (News.source == "iqna") & 
+                    (News.source == "donyaeqtesad") & 
                     (News.url == url)
                 )
             )
             existing = result.scalar_one_or_none()
         
-        # If still not found, check if any stored URL starts with normalized URL
-        # (for cases where URL was stored with query params)
         if not existing:
             result = await db.execute(
                 select(News).where(
-                    (News.source == "iqna") & 
+                    (News.source == "donyaeqtesad") & 
                     (News.url.like(f"{normalized_url}%"))
                 )
             )
@@ -261,12 +255,12 @@ class IQNAWorker(BaseWorker):
         
         if existing:
             self.logger.info(
-                f"Article already exists in database (skipping): {url} (normalized: {normalized_url}, matched: {existing.url})",
+                f"Article already exists in database (skipping): {url}",
                 extra={"article_url": url}
             )
         else:
             self.logger.debug(
-                f"Article not found in database, will save: {url} (normalized: {normalized_url})",
+                f"Article not found in database, will save: {url}",
                 extra={"article_url": url}
             )
         return existing is not None
@@ -326,7 +320,7 @@ class IQNAWorker(BaseWorker):
                 title_tag = soup.find("title")
                 if title_tag:
                     title = title_tag.get_text(strip=True)
-                    # Remove " - IQNA" or similar suffixes
+                    # Remove " - دنیای اقتصاد" or similar suffixes
                     if " - " in title:
                         title = title.split(" - ")[0].strip()
 
@@ -334,52 +328,31 @@ class IQNAWorker(BaseWorker):
             body_html = ""
             article_tag = None
             
-            # Priority 1: XPath //*[@id="news"]/main/div/div[1]/div/section/div[3]
+            # Priority 1: XPath /html/body/div/div[2]/main/div[1]/div[1]/div[1]/div[1]/article/div[2]
             try:
                 from lxml import etree
                 parser = etree.HTMLParser(encoding='utf-8')
-                # Use content (bytes) for lxml parsing
                 tree = etree.fromstring(content, parser=parser)
-                
-                # Try multiple XPath patterns
-                xpath_patterns = [
-                    '//*[@id="news"]/main/div/div[1]/div/section/div[3]',
-                    '//*[@id="news"]//main//div//section//div[3]',
-                    '//main//section//div[3]',
-                    '//*[@id="news"]//section//div[contains(@class, "content") or contains(@class, "body")]',
-                ]
-                
-                for xpath_pattern in xpath_patterns:
-                    try:
-                        xpath_result = tree.xpath(xpath_pattern)
-                        if xpath_result and len(xpath_result) > 0:
-                            # Convert lxml element to BeautifulSoup
-                            xpath_elem = xpath_result[0]
-                            # Get HTML string from lxml element
-                            xpath_html = etree.tostring(xpath_elem, encoding='unicode', method='html')
-                            # Parse with BeautifulSoup for further processing
-                            xpath_soup = BeautifulSoup(xpath_html, 'html.parser')
-                            # Check if it has meaningful content
-                            text_content = xpath_soup.get_text(strip=True)
-                            if len(text_content) > 100:
-                                article_tag = xpath_soup
-                                self.logger.debug(f'Found article body using XPath {xpath_pattern}', extra={"article_url": url})
-                                break
-                    except Exception as xpath_error:
-                        self.logger.debug(f"Error with XPath {xpath_pattern}: {xpath_error}", extra={"article_url": url})
-                        continue
+                xpath_result = tree.xpath('/html/body/div/div[2]/main/div[1]/div[1]/div[1]/div[1]/article/div[2]')
+                if xpath_result and len(xpath_result) > 0:
+                    # Convert lxml element to BeautifulSoup
+                    xpath_elem = xpath_result[0]
+                    # Get HTML string from lxml element
+                    xpath_html = etree.tostring(xpath_elem, encoding='unicode', method='html')
+                    # Parse with BeautifulSoup for further processing
+                    xpath_soup = BeautifulSoup(xpath_html, 'html.parser')
+                    # Check if it has meaningful content
+                    text_content = xpath_soup.get_text(strip=True)
+                    if len(text_content) > 100:
+                        article_tag = xpath_soup
+                        self.logger.debug(f'Found article body using XPath /html/body/div/div[2]/main/div[1]/div[1]/div[1]/div[1]/article/div[2]', extra={"article_url": url})
             except Exception as e:
-                self.logger.debug(f"Error extracting article body using XPath: {e}", extra={"article_url": url}, exc_info=True)
+                self.logger.debug(f"Error extracting article body using XPath: {e}", extra={"article_url": url})
             
-            # Priority 2: Try CSS selectors
+            # Fallback: Try CSS selectors (only if XPath fails)
             if not article_tag:
                 article_selectors = [
-                    "#news main section div:nth-of-type(3)",
-                    "#news main div section div:nth-of-type(3)",
-                    "#news main section div",
-                    "#news main div section div",
-                    "main section div:nth-of-type(3)",
-                    "main section div",
+                    "article div",
                     "article",
                     ".article-body",
                     ".content",
@@ -387,6 +360,7 @@ class IQNAWorker(BaseWorker):
                     "#content",
                     ".news-content",
                     ".article-content",
+                    "main",
                     "[role='main']",
                     ".main-content",
                     ".news-body",
@@ -411,36 +385,6 @@ class IQNAWorker(BaseWorker):
                     except Exception as e:
                         self.logger.debug(f"Error with selector {selector}: {e}", extra={"article_url": url})
                         continue
-            
-            # Try to find the main content area by looking for divs with substantial text
-            if not article_tag:
-                # Find h1 first
-                h1_tag = soup.find("h1")
-                if h1_tag:
-                    # Look for divs after h1 that contain substantial text
-                    current = h1_tag.next_sibling
-                    while current:
-                        if hasattr(current, 'name') and current.name == 'div':
-                            text_content = current.get_text(strip=True)
-                            # Check if this div has substantial content and doesn't look like navigation/menu
-                            if len(text_content) > 200 and not any(skip in str(current.get('class', [])).lower() for skip in ['nav', 'menu', 'header', 'footer', 'sidebar']):
-                                article_tag = current
-                                self.logger.debug("Found article body by searching after h1", extra={"article_url": url})
-                                break
-                        current = current.next_sibling if hasattr(current, 'next_sibling') else None
-                    
-                    # If still not found, try finding parent of h1 and look for content divs
-                    if not article_tag and h1_tag:
-                        parent = h1_tag.parent
-                        if parent:
-                            # Look for divs with substantial text in the parent
-                            content_divs = parent.find_all('div', recursive=False)
-                            for div in content_divs:
-                                text_content = div.get_text(strip=True)
-                                if len(text_content) > 200:
-                                    article_tag = div
-                                    self.logger.debug("Found article body in parent container", extra={"article_url": url})
-                                    break
 
             if article_tag:
                 # Remove script and style tags
@@ -457,6 +401,11 @@ class IQNAWorker(BaseWorker):
                 for tag in article_tag.find_all(class_=lambda x: x and any(skip in x.lower() for skip in unwanted_classes)):
                     tag.decompose()
                 
+                # Remove "inline-box-theme1 inline-box-id" elements (related news boxes)
+                for tag in article_tag.find_all(class_=lambda x: x and ("inline-box-theme1" in str(x) or "inline-box-id" in str(x))):
+                    tag.decompose()
+                    self.logger.debug("Removed inline-box element (related news)", extra={"article_url": url})
+                
                 # Remove advertisement links
                 for ad_link in article_tag.find_all("a", href=lambda x: x and ("/redirect/ads/" in x or "/ads/" in x or "advertisement" in x.lower())):
                     parent = ad_link.find_parent()
@@ -472,6 +421,27 @@ class IQNAWorker(BaseWorker):
                             if hasattr(sibling, 'decompose'):
                                 sibling.decompose()
                 
+                # Remove "خبر مرتبط" (related news) sections
+                related_news_markers = [
+                    "خبر مرتبط",
+                    "اخبار مرتبط",
+                    "مطالب مرتبط",
+                    "خبرهای مرتبط",
+                ]
+                for marker_text in related_news_markers:
+                    # Find elements containing the marker text
+                    marker_elements = article_tag.find_all(string=lambda text: text and marker_text in text)
+                    for marker in marker_elements:
+                        marker_parent = marker.find_parent()
+                        if marker_parent:
+                            # Remove the parent element and all its siblings after it
+                            for sibling in list(marker_parent.next_siblings):
+                                if hasattr(sibling, 'decompose'):
+                                    sibling.decompose()
+                            # Also remove the parent itself
+                            marker_parent.decompose()
+                            self.logger.debug(f"Removed related news section: {marker_text}", extra={"article_url": url})
+                
                 # Convert relative image URLs to absolute URLs
                 for img_tag in article_tag.find_all("img"):
                     for attr in ["src", "data-src", "data-lazy-src", "data-original"]:
@@ -484,20 +454,34 @@ class IQNAWorker(BaseWorker):
                                 self.logger.debug(f"Converted relative image URL to absolute: {img_url} -> {absolute_url}", extra={"article_url": url})
                             break
                 
+                # Remove unwanted links (internal site links, social media links, etc.)
+                for link_tag in article_tag.find_all("a"):
+                    href = link_tag.get("href", "")
+                    if href:
+                        # Remove links to main site page
+                        if href == "/" or href == "https://donya-e-eqtesad.com/" or href == "https://donya-e-eqtesad.com":
+                            # Keep text, remove link
+                            link_tag.unwrap()
+                            self.logger.debug(f"Removed link to main site: {href}", extra={"article_url": url})
+                        # Remove internal news links
+                        elif href.startswith("/") and ("/بخش-" in href or "/news/" in href):
+                            # Keep text, remove link
+                            link_tag.unwrap()
+                            self.logger.debug(f"Removed internal news link: {href}", extra={"article_url": url})
+                        # Remove social media links
+                        elif any(social in href.lower() for social in ["facebook.com", "twitter.com", "instagram.com", "telegram.org", "t.me", "plus.google.com"]):
+                            # Keep text, remove link
+                            link_tag.unwrap()
+                            self.logger.debug(f"Removed social media link: {href}", extra={"article_url": url})
+                        # Remove tag/category links
+                        elif href.startswith("/tag/") or href.startswith("/category/"):
+                            # Keep text, remove link
+                            link_tag.unwrap()
+                            self.logger.debug(f"Removed tag/category link: {href}", extra={"article_url": url})
+                
                 body_html = str(article_tag)
             else:
-                self.logger.warning(
-                    f"Could not find article body content. Tried XPath and CSS selectors.",
-                    extra={"article_url": url}
-                )
-                # Log a sample of the HTML structure for debugging
-                try:
-                    main_elem = soup.find("main")
-                    if main_elem:
-                        main_html_sample = str(main_elem)[:500]
-                        self.logger.debug(f"Main element sample: {main_html_sample}", extra={"article_url": url})
-                except Exception:
-                    pass
+                self.logger.warning(f"Could not find article body content", extra={"article_url": url})
 
             # Extract summary from meta description or first paragraph
             summary = ""
@@ -513,34 +497,6 @@ class IQNAWorker(BaseWorker):
             # Extract category and published date
             category = ""
             published_at = ""
-            
-            # Extract category from XPath
-            try:
-                from lxml import etree
-                parser = etree.HTMLParser(encoding='utf-8')
-                tree = etree.fromstring(content, parser=parser)
-                
-                # Try multiple XPath patterns
-                category_xpaths = [
-                    '//*[@id="news"]/main/div/div[1]/div/div[1]/div[2]/div[1]/a[4]',
-                    '//*[@id="news"]/main/div/div[1]/div/div[1]/div[2]/div[1]',
-                ]
-                
-                for category_xpath in category_xpaths:
-                    try:
-                        category_elements = tree.xpath(category_xpath)
-                        if category_elements and len(category_elements) > 0:
-                            # Get text content from the element
-                            category_text = ''.join(category_elements[0].itertext()).strip()
-                            if category_text:
-                                category = category_text
-                                self.logger.debug(f"Found category from XPath {category_xpath}: {category}", extra={"article_url": url})
-                                break
-                    except Exception as xpath_error:
-                        self.logger.debug(f"Error with XPath {category_xpath}: {xpath_error}", extra={"article_url": url})
-                        continue
-            except Exception as e:
-                self.logger.debug(f"Error extracting category using XPath: {e}", extra={"article_url": url})
 
             # Extract image
             image_url = ""
@@ -599,7 +555,7 @@ class IQNAWorker(BaseWorker):
                         continue
                     
                     src = img.get("src") or img.get("data-src") or img.get("data-lazy-src") or img.get("data-original")
-                    if src and "iqna.ir" in src:
+                    if src and ("donya-e-eqtesad.com" in src or "cdn.donya-e-eqtesad.com" in src):
                         if "logo" in src.lower() or "barcode" in src.lower():
                             continue
                         width = img.get("width")
@@ -786,7 +742,7 @@ class IQNAWorker(BaseWorker):
                         self.logger.debug(f"Truncated raw_category to 200 chars", extra={"article_url": rss_item["link"]})
                 
                 # Normalize category
-                normalized_category, preserved_raw_category = normalize_category("iqna", raw_category)
+                normalized_category, preserved_raw_category = normalize_category("donyaeqtesad", raw_category)
                 
                 # Also truncate preserved_raw_category if needed
                 if preserved_raw_category and len(preserved_raw_category) > 200:
@@ -799,7 +755,7 @@ class IQNAWorker(BaseWorker):
                 normalized_url = rss_item["link"].rstrip('/').split('?')[0].split('#')[0]
                 
                 news = News(
-                    source="iqna",
+                    source="donyaeqtesad",
                     title=article_content.get("title") or rss_item["title"],
                     body_html=article_content.get("body_html", ""),
                     summary=article_content.get("summary") or rss_item.get("description", ""),
@@ -828,7 +784,7 @@ class IQNAWorker(BaseWorker):
 
     async def fetch_news(self) -> None:
         """
-        Fetch news from IQNA RSS feed.
+        Fetch news from Donya-e-Eqtesad RSS feed.
         """
         if not self.running:
             return

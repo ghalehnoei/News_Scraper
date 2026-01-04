@@ -42,6 +42,7 @@ SOURCE_NAMES = {
     "donyaeqtesad": "دنیای اقتصاد",
     "snn": "خبرگزاری دانشجو",
     "tabnak": "تابناک",
+    "eghtesadonline": "اقتصادآنلاین",
 }
 
 

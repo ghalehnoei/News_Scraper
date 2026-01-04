@@ -980,6 +980,55 @@ CATEGORY_MAPPINGS = {
         "استان ها": "provinces",
         "محلی": "provinces",
     },
+    "eghtesadonline": {
+        # Economy
+        "اقتصاد": "economy",
+        "اقتصادی": "economy",
+        "بورس": "economy",
+        "بازار": "economy",
+        "صنعت": "economy",
+        "کسب‌وکار": "economy",
+        "مسکن": "economy",
+        "انرژی": "economy",
+        "نفت": "economy",
+        "گاز": "economy",
+        "بانک": "economy",
+        "پول و بانک": "economy",
+        "ارز": "economy",
+        "طلا": "economy",
+        # Technology
+        "فناوری": "technology",
+        "فن‌آوری": "technology",
+        "دیجیتال": "technology",
+        "اینترنت": "technology",
+        "موبایل": "technology",
+        # Sports
+        "ورزش": "sports",
+        "ورزشی": "sports",
+        "فوتبال": "sports",
+        # Culture
+        "فرهنگ": "culture",
+        "هنر": "culture",
+        # Health
+        "سلامت": "health",
+        "بهداشت": "health",
+        "پزشکی": "health",
+        # Politics
+        "سیاسی": "politics",
+        "سیاست": "politics",
+        # International
+        "بین‌الملل": "international",
+        "جهان": "international",
+        "خارجی": "international",
+        # Society
+        "اجتماعی": "society",
+        "جامعه": "society",
+        # Provinces
+        "استان‌ها": "provinces",
+        "استانها": "provinces",
+        "استان ها": "provinces",
+        "محلی": "provinces",
+    },
 }
 
 

@@ -26,6 +26,7 @@ from app.sources.donyaeqtesad import DonyaEqtesadWorker
 from app.sources.snn import SNNWorker
 from app.sources.ipna import IPNAWorker
 from app.sources.tabnak import TabnakWorker
+from app.sources.eghtesadonline import EghtesadOnlineWorker
 
 
 async def main() -> None:
@@ -74,6 +75,8 @@ async def main() -> None:
         worker = IPNAWorker()
     elif settings.worker_source == "tabnak":
         worker = TabnakWorker()
+    elif settings.worker_source == "eghtesadonline":
+        worker = EghtesadOnlineWorker()
     else:
         # Fallback to base worker for unknown sources
         worker = BaseWorker(settings.worker_source)

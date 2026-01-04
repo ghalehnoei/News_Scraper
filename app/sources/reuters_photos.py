@@ -14,6 +14,10 @@ import aiohttp
 import yt_dlp
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from app.core.config import settings
 from app.core.logging import setup_logging
@@ -31,8 +35,8 @@ REUTERS_AUTH_URL = "https://commerce.reuters.com/rmd/rest/xml/login"
 REUTERS_ITEMS_URL = "http://rmb.reuters.com/rmd/rest/xml/items"
 REUTERS_ITEM_URL = "http://rmb.reuters.com/rmd/rest/xml/item"
 REUTERS_CHANNEL = "pwu404"
-REUTERS_USERNAME = "IRRINN2Foryou"
-REUTERS_PASSWORD = "Webservice2You"
+REUTERS_USERNAME = os.getenv("REUTERS_USERNAME")
+REUTERS_PASSWORD = os.getenv("REUTERS_PASSWORD")
 
 # HTTP client settings
 HTTP_TIMEOUT = aiohttp.ClientTimeout(total=60, connect=20)
@@ -81,8 +85,13 @@ class ReutersPhotosWorker(BaseWorker):
     async def _authenticate(self) -> Optional[str]:
         """Authenticate with Reuters API and get auth token."""
         try:
+            # Check if credentials are available
+            if not REUTERS_USERNAME or not REUTERS_PASSWORD:
+                logger.error("Reuters username or password not configured. Please set REUTERS_USERNAME and REUTERS_PASSWORD in .env file")
+                return None
+
             session = await self._get_http_session()
-            
+
             params = {
                 "username": REUTERS_USERNAME,
                 "password": REUTERS_PASSWORD,

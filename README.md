@@ -363,6 +363,8 @@ A PowerShell script (`run-local.ps1`) is provided to simplify local development:
 - **IRNA** - RSS feed + Playwright for JavaScript-rendered content
 - **Fars** - Playwright-based scraping from listing pages
 - **Tasnim** - Archive page scraping with selectolax
+- **IRIB News** - RSS feed based scraping
+- **IPNA (ایپنا)** - Web scraping from section pages with selectolax
 
 ### Category Normalization
 

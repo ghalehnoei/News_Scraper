@@ -24,6 +24,7 @@ from app.sources.iqna import IQNAWorker
 from app.sources.hamshahri import HamshahriWorker
 from app.sources.donyaeqtesad import DonyaEqtesadWorker
 from app.sources.snn import SNNWorker
+from app.sources.ipna import IPNAWorker
 
 
 async def main() -> None:
@@ -68,6 +69,8 @@ async def main() -> None:
         worker = DonyaEqtesadWorker()
     elif settings.worker_source == "snn":
         worker = SNNWorker()
+    elif settings.worker_source == "ipna":
+        worker = IPNAWorker()
     else:
         # Fallback to base worker for unknown sources
         worker = BaseWorker(settings.worker_source)

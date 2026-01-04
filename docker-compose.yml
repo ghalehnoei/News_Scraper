@@ -234,7 +234,7 @@ services:
     restart: unless-stopped
     networks:
       news_network:
-        ipv4_address: 10.20.10.37
+        ipv4_address: 10.20.10.38
 
   worker-kayhan:
     image: ghcr.io/ghalehnoei/news-scraper/worker:latest
@@ -258,7 +258,7 @@ services:
     restart: unless-stopped
     networks:
       news_network:
-        ipv4_address: 10.20.10.38
+        ipv4_address: 10.20.10.39
 
   worker-mizan:
     image: ghcr.io/ghalehnoei/news-scraper/worker:latest
@@ -282,7 +282,7 @@ services:
     restart: unless-stopped
     networks:
       news_network:
-        ipv4_address: 10.20.10.39
+        ipv4_address: 10.20.10.40
 
   worker-varzesh3:
     image: ghcr.io/ghalehnoei/news-scraper/worker:latest
@@ -306,7 +306,7 @@ services:
     restart: unless-stopped
     networks:
       news_network:
-        ipv4_address: 10.20.10.40
+        ipv4_address: 10.20.10.41
 
   worker-mashreghnews:
     image: ghcr.io/ghalehnoei/news-scraper/worker:latest
@@ -330,7 +330,7 @@ services:
     restart: unless-stopped
     networks:
       news_network:
-        ipv4_address: 10.20.10.41
+        ipv4_address: 10.20.10.42
 
   worker-yjc:
     image: ghcr.io/ghalehnoei/news-scraper/worker:latest
@@ -354,7 +354,7 @@ services:
     restart: unless-stopped
     networks:
       news_network:
-        ipv4_address: 10.20.10.42
+        ipv4_address: 10.20.10.43
 
   worker-iqna:
     image: ghcr.io/ghalehnoei/news-scraper/worker:latest
@@ -378,7 +378,7 @@ services:
     restart: unless-stopped
     networks:
       news_network:
-        ipv4_address: 10.20.10.43
+        ipv4_address: 10.20.10.44
 
   worker-hamshahri:
     image: ghcr.io/ghalehnoei/news-scraper/worker:latest
@@ -402,7 +402,7 @@ services:
     restart: unless-stopped
     networks:
       news_network:
-        ipv4_address: 10.20.10.44
+        ipv4_address: 10.20.10.45
 
   worker-donyaeqtesad:
     image: ghcr.io/ghalehnoei/news-scraper/worker:latest
@@ -426,7 +426,7 @@ services:
     restart: unless-stopped
     networks:
       news_network:
-        ipv4_address: 10.20.10.45
+        ipv4_address: 10.20.10.46
 
   worker-snn:
     image: ghcr.io/ghalehnoei/news-scraper/worker:latest
@@ -450,7 +450,31 @@ services:
     restart: unless-stopped
     networks:
       news_network:
-        ipv4_address: 10.20.10.46
+        ipv4_address: 10.20.10.47
+
+  worker-tabnak:
+    image: ghcr.io/ghalehnoei/news-scraper/worker:latest
+    environment:
+      WORKER_SOURCE: tabnak
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-news_db}}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_BUCKET: ${S3_BUCKET:-news-images}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_USE_SSL: ${S3_USE_SSL:-false}
+      S3_VERIFY_SSL: ${S3_VERIFY_SSL:-true}
+      POLL_INTERVAL: ${POLL_INTERVAL:-300}
+      MAX_REQUESTS_PER_MINUTE: ${MAX_REQUESTS_PER_MINUTE:-60}
+      DELAY_BETWEEN_REQUESTS: ${DELAY_BETWEEN_REQUESTS:-1.0}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      news_network:
+        ipv4_address: 10.20.10.48
 
 volumes:
   postgres_data:

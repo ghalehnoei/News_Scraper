@@ -41,6 +41,7 @@ SOURCE_NAMES = {
     "hamshahri": "همشهری‌آنلاین",
     "donyaeqtesad": "دنیای اقتصاد",
     "snn": "خبرگزاری دانشجو",
+    "tabnak": "تابناک",
 }
 
 

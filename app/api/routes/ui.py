@@ -43,6 +43,7 @@ SOURCE_NAMES = {
     "hamshahri": "همشهری‌آنلاین",
     "donyaeqtesad": "دنیای اقتصاد",
     "snn": "خبرگزاری دانشجو",
+    "tabnak": "تابناک",
 }
 
 # Color codes for sources
@@ -64,6 +65,7 @@ SOURCE_COLORS = {
     "hamshahri": "#e67e22", # نارنجی تیره
     "donyaeqtesad": "#16a085", # فیروزه‌ای
     "snn": "#e74c3c", # قرمز
+    "tabnak": "#34495e", # خاکستری آبی تیره
 }
 
 # Persian names for normalized categories

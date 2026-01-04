@@ -12,7 +12,7 @@ from app.db.models import News
 
 async def main():
     async with AsyncSessionLocal() as db:
-        result = await db.execute(delete(News).where(News.source == "ipna"))
+        result = await db.execute(delete(News).where(News.source == "tabnak"))
         await db.commit()
         print(f"Deleted {result.rowcount} news items from IPNA")
 

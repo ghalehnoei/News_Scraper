@@ -24,6 +24,84 @@ logger = setup_logging()
 
 router = APIRouter(prefix="/ui", tags=["ui"])
 
+
+async def process_body_html_images(body_html: str) -> str:
+    """Process body_html to convert S3 keys in img src to presigned URLs."""
+    if not body_html:
+        return body_html
+    
+    # Find all img tags with src attribute
+    img_pattern = re.compile(r'<img\s+([^>]*?)src=["\']([^"\']+)["\']([^>]*?)>', re.IGNORECASE)
+    
+    async def replace_img(match):
+        before_src = match.group(1)
+        src_url = match.group(2)
+        after_src = match.group(3)
+        
+        # Skip if already a full URL (http/https) or data URL
+        if src_url.startswith(('http://', 'https://', 'data:', '//')):
+            # Check if it's a Reuters token URL that needs to be kept as-is
+            if 'token=' in src_url:
+                return match.group(0)  # Keep original
+            # If it's an http URL without token, it might be an S3 endpoint URL
+            # Try to extract key and convert to presigned
+            if src_url.startswith(settings.s3_endpoint):
+                try:
+                    prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}/"
+                    if src_url.startswith(prefix):
+                        s3_key = src_url[len(prefix):]
+                    else:
+                        prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}"
+                        if src_url.startswith(prefix):
+                            s3_key = src_url[len(prefix):].lstrip("/")
+                        else:
+                            return match.group(0)  # Can't extract key
+                    
+                    # Remove query string from S3 key
+                    if '?' in s3_key:
+                        s3_key = s3_key.split('?')[0]
+                    
+                    presigned = await generate_presigned_url(s3_key)
+                    if presigned:
+                        return f'<img {before_src}src="{presigned}"{after_src}>'
+                except Exception as e:
+                    logger.debug(f"Failed to process S3 endpoint URL in body_html: {e}")
+            
+            return match.group(0)  # Keep original
+        
+        # Process S3 key or s3:// URL
+        try:
+            s3_key = src_url
+            
+            # Handle s3://bucket/path format
+            if s3_key.startswith("s3://"):
+                path_after_s3 = s3_key[5:]
+                parts = path_after_s3.split("/", 1)
+                if len(parts) == 2:
+                    s3_key = parts[1]
+                else:
+                    s3_key = path_after_s3
+            
+            # Remove query string
+            if '?' in s3_key:
+                s3_key = s3_key.split('?')[0]
+            
+            presigned = await generate_presigned_url(s3_key)
+            if presigned:
+                return f'<img {before_src}src="{presigned}"{after_src}>'
+        except Exception as e:
+            logger.debug(f"Failed to process S3 key in body_html: {e}")
+        
+        return match.group(0)  # Keep original if processing fails
+    
+    # Process all img tags
+    processed_html = body_html
+    for match in img_pattern.finditer(body_html):
+        replacement = await replace_img(match)
+        processed_html = processed_html.replace(match.group(0), replacement, 1)
+    
+    return processed_html
+
 # Persian names for sources
 SOURCE_NAMES = {
     "mehrnews": "خبرگزاری مهر",
@@ -45,6 +123,8 @@ SOURCE_NAMES = {
     "snn": "خبرگزاری دانشجو",
     "tabnak": "تابناک",
     "eghtesadonline": "اقتصادآنلاین",
+    "reuters_photos": "عکس‌های رویترز",
+    "reuters_text": "اخبار رویترز",
 }
 
 # Color codes for sources
@@ -68,6 +148,8 @@ SOURCE_COLORS = {
     "snn": "#e74c3c", # قرمز
     "tabnak": "#34495e", # خاکستری آبی تیره
     "eghtesadonline": "#27ae60", # سبز
+    "reuters_photos": "#c0392b", # قرمز تیره
+    "reuters_text": "#c0392b", # قرمز تیره (مشابه photos)
 }
 
 # Persian names for normalized categories
@@ -337,6 +419,24 @@ async def news_grid(
         source_persian = SOURCE_NAMES.get(article.source, article.source)
         source_color = SOURCE_COLORS.get(article.source, "#95a5a6")
         
+        # Determine text direction and styling based on language and breaking news
+        # For Reuters sources, check language; for others, use default RTL
+        if article.source in ["reuters_photos", "reuters_text"]:
+            # Use language field if available, otherwise check raw_category
+            language = getattr(article, 'language', None)
+            if language and language.startswith('ar'):
+                is_ltr = False  # Arabic is RTL
+            else:
+                is_ltr = True   # English and other languages are LTR
+
+            # Check for breaking news from database field or title keywords
+            is_breaking = getattr(article, 'is_breaking', False) or any(
+                keyword in article.title.upper() for keyword in ["BREAKING", "URGENT", "FLASH"]
+            )
+        else:
+            is_ltr = False  # Persian sources are RTL
+            is_breaking = False
+        
         articles_data.append({
             "id": str(article.id),
             "title": article.title,
@@ -349,6 +449,10 @@ async def news_grid(
             "category": article.category,  # Normalized category
             "category_persian": CATEGORY_NAMES.get(article.category, article.category) if article.category else None,  # Persian name for display
             "raw_category": article.raw_category,  # Original category for reference
+            "is_ltr": is_ltr,  # Text direction flag for title
+            "is_breaking": is_breaking,  # Breaking news flag
+            "language": getattr(article, 'language', 'en'),  # Language code
+            "priority": getattr(article, 'priority', 5),  # Reuters priority level (1-5)
         })
 
     # Calculate pagination info
@@ -612,6 +716,10 @@ async def news_detail(
                         logger.debug(f"Fixed remaining S3 URL in sanitized body: {s3_full_path[:60]}... -> {presigned[:60]}...")
                 except Exception as e:
                     logger.warning(f"Failed to fix remaining S3 URL s3://{bucket}/{s3_path_raw}: {e}", exc_info=True)
+    
+    # Process img tags to convert S3 keys in src attributes to presigned URLs
+    if sanitized_body:
+        sanitized_body = await process_body_html_images(sanitized_body)
 
     # Generate presigned URL for image if it exists
     image_url = article.image_url
@@ -668,6 +776,21 @@ async def news_detail(
             # If presigned URL generation fails, use original URL
             logger.warning(f"Failed to generate presigned URL for {image_url}: {e}", exc_info=True)
 
+    # Determine text direction and styling based on language and breaking news
+    if article.source in ["reuters_photos", "reuters_text"]:
+        language = getattr(article, 'language', None)
+        if language and language.startswith('ar'):
+            is_ltr = False  # Arabic is RTL
+        else:
+            is_ltr = True   # English and other languages are LTR
+
+        is_breaking = getattr(article, 'is_breaking', False) or any(
+            keyword in article.title.upper() for keyword in ["BREAKING", "URGENT", "FLASH"]
+        )
+    else:
+        is_ltr = False  # Persian sources are RTL
+        is_breaking = False
+    
     article_data = {
         "id": str(article.id),
         "title": article.title,
@@ -678,6 +801,10 @@ async def news_detail(
         "image_url": image_url,
         "category": article.category,
         "url": article.url,
+        "is_ltr": is_ltr,  # Text direction flag for title
+        "is_breaking": is_breaking,  # Breaking news flag
+        "language": getattr(article, 'language', 'en'),  # Language code
+        "priority": getattr(article, 'priority', 5),  # Reuters priority level (1-5)
     }
 
     template = templates.get_template("news_detail.html")

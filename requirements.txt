@@ -32,3 +32,6 @@ jdatetime>=4.1.0
 # Browser automation for IRNA
 playwright>=1.40.0
 
+# Download utility for Reuters
+yt-dlp>=2024.1.0
+

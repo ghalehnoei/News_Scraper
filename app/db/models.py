@@ -96,6 +96,9 @@ class News(Base):
     image_url = Column(String(1000), nullable=True)
     category = Column(String(200), nullable=True, index=True)  # Normalized category
     raw_category = Column(String(200), nullable=True)  # Original category from source
+    language = Column(String(10), nullable=True)  # Language code (e.g., 'en', 'ar', 'fr')
+    is_breaking = Column(Boolean, default=False, nullable=False)  # Breaking news flag
+    priority = Column(Integer, nullable=True)  # Reuters priority level (1-5)
 
     __table_args__ = (
         UniqueConstraint("url", name="uq_news_url"),

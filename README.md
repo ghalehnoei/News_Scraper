@@ -367,6 +367,7 @@ A PowerShell script (`run-local.ps1`) is provided to simplify local development:
 - **IPNA (ایپنا)** - Web scraping from section pages with selectolax
 - **Tabnak (تابناک)** - RSS feed based scraping with support for photo galleries and videos
 - **Eghtesad Online (اقتصادآنلاین)** - RSS feed based scraping
+- **Reuters Photos (عکس‌های رویترز)** - API-based photo feed from Reuters
 
 ### Category Normalization
 

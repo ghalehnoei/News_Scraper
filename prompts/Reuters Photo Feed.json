@@ -1,0 +1,497 @@
+{
+  "name": "Reuters Photo Feed",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.xml",
+      "typeVersion": 1,
+      "position": [
+        448,
+        272
+      ],
+      "id": "2194b02c-c8cf-4176-822b-2c9c31a17492",
+      "name": "XML1"
+    },
+    {
+      "parameters": {
+        "url": "https://commerce.reuters.com/rmd/rest/xml/login?",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "IRRINN2Foryou"
+            },
+            {
+              "name": "password",
+              "value": "Webservice2You"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        272
+      ],
+      "id": "14e1fd94-27e0-4a84-948d-337af5cfa076",
+      "name": "Get Token"
+    },
+    {
+      "parameters": {
+        "url": "http://rmb.reuters.com/rmd/rest/xml/items?",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "channel",
+              "value": "=pwu404"
+            },
+            {
+              "name": "token",
+              "value": "={{ $('Get Token').item.json.authToken.authToken }}"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            },
+            {
+              "name": "mediaType",
+              "value": "P"
+            },
+            {
+              "name": "completeSentences",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        272
+      ],
+      "id": "d22e999e-4371-4b72-94ad-4a9df5131fd5",
+      "name": "Get Items"
+    },
+    {
+      "parameters": {
+        "url": "http://rmb.reuters.com/rmd/rest/xml/item?",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "=id",
+              "value": "={{ $('XML1').item.json.results.result.id }}"
+            },
+            {
+              "name": "channel",
+              "value": "=pwu404"
+            },
+            {
+              "name": "token",
+              "value": "={{ $('Get Token').first().json.authToken.authToken }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        480
+      ],
+      "id": "68ffa8e6-b2f2-4888-9a01-b94dc3bfba57",
+      "name": "Get Item",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.xml",
+      "typeVersion": 1,
+      "position": [
+        224,
+        480
+      ],
+      "id": "b440b05e-c0ce-4424-a719-2fe586e9fd9a",
+      "name": "XML2",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.guid }}",
+              "operation": "isEmpty"
+            }
+          ]
+        }
+      },
+      "id": "e79a18ff-7893-4565-8981-d63fd8da3742",
+      "name": "Check if New",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        880,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "guid",
+        "key": "={{ $json.results.result.guid }}",
+        "keyType": "string",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        656,
+        272
+      ],
+      "id": "d0322e33-868f-4534-9cf4-00ab5f664577",
+      "name": "Redis",
+      "credentials": {
+        "redis": {
+          "id": "cyW6r0IHGs71DgVV",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ $('XML1').item.json.results.result.guid }}",
+        "value": "=1",
+        "keyType": "string"
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        480
+      ],
+      "id": "07a621fa-ce56-4b80-8ff2-0ee8e9058064",
+      "name": "Redis1",
+      "credentials": {
+        "redis": {
+          "id": "cyW6r0IHGs71DgVV",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 60
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -224,
+        272
+      ],
+      "id": "c373e8de-40c6-41c7-8776-e5aab6decd29",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "guid",
+              "value": "={{$json[\"newsMessage\"][\"itemSet\"][\"newsItem\"][\"itemMeta\"][\"rtr:versionedId\"][\"guid\"]}}"
+            },
+            {
+              "name": "headline",
+              "value": "={{ $json.newsMessage.itemSet.newsItem.contentMeta.headline }}"
+            },
+            {
+              "name": "body",
+              "value": "={{ $json.newsMessage.itemSet.newsItem.contentMeta.description._ }}"
+            },
+            {
+              "name": "language",
+              "value": "={{ $json.newsMessage.itemSet.newsItem.rightsInfo.copyrightNotice['xml:lang'] }}"
+            },
+            {
+              "name": "priority",
+              "value": "={{ $json.newsMessage.header.priority }}"
+            },
+            {
+              "name": "sent",
+              "value": "={{ $('XML2').item.json.newsMessage.header.sent }}"
+            },
+            {
+              "name": "PhotoUrl",
+              "value": "={{ $json.newsMessage.itemSet.newsItem.contentSet.remoteContent[2].href }}"
+            },
+            {
+              "name": "Thumbnail",
+              "value": "={{ $json.newsMessage.itemSet.newsItem.contentSet.remoteContent[1].href }}"
+            },
+            {
+              "name": "FileName",
+              "value": "={{ $json.newsMessage.itemSet.newsItem.contentSet.remoteContent[2]['rtr:altId']._ }}"
+            }
+          ]
+        },
+        "options": {
+          "dotNotation": false
+        }
+      },
+      "id": "9adb3f90-4cdf-4926-9856-c7789f539115",
+      "name": "Extract GUID2",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        448,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "feed",
+        "fileName": "=Reuters/Photo/{{ $now.setZone(\"Asia/Tehran\").toFormat(\"yyyy-MM-dd\") }}/{{ $json.FileName }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        304,
+        0
+      ],
+      "id": "1f8253bb-9573-4fc2-94ae-0c4d2533a778",
+      "name": "S3"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const bodyArray = item.json.body;\n\n  // Join paragraphs into a single text with newlines\n  const bodyText = Array.isArray(bodyArray)\n    ? bodyArray.join('\\n\\n')\n    : bodyArray;\n\n  // Map priority\n  const originalPriority = parseInt(item.json.priority, 10);\n  const mappedPriority = (originalPriority === 1 || originalPriority === 2) ? 7 : 6;\n\n  // Map language codes\n  const langMap = {\n    en: 8,\n    ar: 3,\n    fr: 4,\n    es: 12\n  };\n\n  const originalLang = item.json.language;\n  const mappedLanguage = langMap[originalLang] || null; // fallback to null if not in map\n\n  return {\n    json: {\n      ...item.json,\n      body: bodyText,\n      priority: mappedPriority,\n      language: mappedLanguage\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        480
+      ],
+      "id": "5e2edb1d-6304-4bb0-820a-ff0dc0fc8089",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "feed",
+        "fileName": "=Reuters/Photo/{{ $now.setZone(\"Asia/Tehran\").toFormat(\"yyyy-MM-dd\") }}/{{ $json.newsMessage.itemSet.newsItem.itemMeta.fileName }}",
+        "binaryData": false,
+        "fileContent": "={{ $('Get Item').item.json.data }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        16,
+        0
+      ],
+      "id": "a5889500-5766-4aad-8d86-db966477e183",
+      "name": "S31"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.30.1.144:5011/download",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "nfs_path",
+              "value": "/download/Reuters/Photo/"
+            },
+            {
+              "name": "image_path",
+              "value": "/download/Reuters/Photo/"
+            },
+            {
+              "name": "image_url",
+              "value": "={{ $json.PhotoUrl }}?token={{ $('Get Token').first().json.authToken.authToken }}"
+            },
+            {
+              "name": "filename",
+              "value": "={{ $json.FileName.slice(0,-4) }}"
+            },
+            {
+              "name": "xml_content",
+              "value": "={{ $('Get Item').item.json.data }}"
+            },
+            {
+              "name": "xml_name",
+              "value": "={{ $json.FileName.slice(0,-4) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        864,
+        480
+      ],
+      "id": "d747eaa9-1900-4f5c-9a94-6b069b7fdb82",
+      "name": "Download"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "XML1": {
+      "main": [
+        [
+          {
+            "node": "Redis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Token": {
+      "main": [
+        [
+          {
+            "node": "Get Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Items": {
+      "main": [
+        [
+          {
+            "node": "XML1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Item": {
+      "main": [
+        [
+          {
+            "node": "XML2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "XML2": {
+      "main": [
+        [
+          {
+            "node": "Extract GUID2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if New": {
+      "main": [
+        [
+          {
+            "node": "Redis1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis": {
+      "main": [
+        [
+          {
+            "node": "Check if New",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis1": {
+      "main": [
+        [
+          {
+            "node": "Get Item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract GUID2": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "e8b7a54d-28f0-47ef-86cb-0d3f93601565",
+  "meta": {
+    "instanceId": "eaa6a6d2467afc6129523e6bd5cce05b1b3d64a48081b269bdc9a15c0402aac5"
+  },
+  "id": "40tl2OixqUOs5EEf",
+  "tags": []
+}

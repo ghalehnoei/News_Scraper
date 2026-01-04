@@ -27,6 +27,8 @@ from app.sources.snn import SNNWorker
 from app.sources.ipna import IPNAWorker
 from app.sources.tabnak import TabnakWorker
 from app.sources.eghtesadonline import EghtesadOnlineWorker
+from app.sources.reuters_photos import ReutersPhotosWorker
+from app.sources.reuters_text import ReutersTextWorker
 
 
 async def main() -> None:
@@ -77,6 +79,10 @@ async def main() -> None:
         worker = TabnakWorker()
     elif settings.worker_source == "eghtesadonline":
         worker = EghtesadOnlineWorker()
+    elif settings.worker_source == "reuters_photos":
+        worker = ReutersPhotosWorker()
+    elif settings.worker_source == "reuters_text":
+        worker = ReutersTextWorker()
     else:
         # Fallback to base worker for unknown sources
         worker = BaseWorker(settings.worker_source)

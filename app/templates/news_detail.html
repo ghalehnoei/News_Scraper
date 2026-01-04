@@ -6,7 +6,7 @@
 <div class="news-detail">
     <div class="news-header">
         <a href="/ui/news" class="back-link">← بازگشت به لیست اخبار</a>
-        <h1 class="news-title">{{ article.title }}</h1>
+        <h1 class="news-title" dir="{{ 'rtl' if article.language == 'ar' else 'ltr' }}" style="text-align: {{ 'right' if article.language == 'ar' else 'left' }};{{ ' color: #e74c3c; font-weight: bold;' if article.is_breaking else '' }}">{{ article.title }}</h1>
         <div class="news-meta">
             <span class="news-source">{{ article.source }}</span>
             {% if article.published_at %}

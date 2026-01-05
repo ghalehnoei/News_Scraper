@@ -125,6 +125,66 @@ SOURCE_NAMES = {
     "reuters_text": "اخبار رویترز",
 }
 
+# Color codes for sources (used in API responses)
+SOURCE_COLORS = {
+    "mehrnews": "#e74c3c",  # قرمز
+    "isna": "#3498db",      # آبی
+    "irna": "#2ecc71",      # سبز
+    "tasnim": "#f39c12",    # نارنجی
+    "fars": "#9b59b6",      # بنفش
+    "iribnews": "#16a085",  # فیروزه‌ای
+    "ipna": "#1abc9c",      # فیروزه‌ای روشن
+    "ilna": "#e67e22",      # نارنجی تیره
+    "kayhan": "#c0392b",     # قرمز تیره
+    "mizan": "#8e44ad",      # بنفش تیره
+    "varzesh3": "#27ae60",   # سبز تیره
+    "mashreghnews": "#d35400",  # نارنجی سوخته
+    "yjc": "#2980b9",  # آبی تیره
+    "iqna": "#8e44ad",  # بنفش
+    "hamshahri": "#e67e22", # نارنجی تیره
+    "donyaeqtesad": "#16a085", # فیروزه‌ای
+    "snn": "#e74c3c", # قرمز
+    "tabnak": "#34495e", # خاکستری آبی تیره
+    "eghtesadonline": "#27ae60", # سبز
+    "reuters_photos": "#c0392b", # قرمز تیره
+    "reuters_text": "#c0392b", # قرمز تیره (مشابه photos)
+}
+
+
+def map_source_persian_name(source_key: str) -> str:
+    """
+    Map a stored source key to the Persian display name.
+    Tries exact match first, then substring match against known keys to handle
+    variants like domains or suffixes stored in DB.
+    """
+    if not source_key:
+        return source_key
+    if source_key in SOURCE_NAMES:
+        return SOURCE_NAMES[source_key]
+    lowered = source_key.lower()
+    for k, v in SOURCE_NAMES.items():
+        if k in lowered:
+            return v
+    return source_key
+
+
+def map_source_color(source_key: str) -> str:
+    """
+    Map a stored source key to a color code.
+    Tries exact match first, then substring match against known keys to handle
+    variants like domains or suffixes stored in DB.
+    """
+    default_color = "#95a5a6"
+    if not source_key:
+        return default_color
+    if source_key in SOURCE_COLORS:
+        return SOURCE_COLORS[source_key]
+    lowered = source_key.lower()
+    for k, v in SOURCE_COLORS.items():
+        if k in lowered:
+            return v
+    return default_color
+
 
 class PaginationInfo(BaseModel):
     """Pagination metadata."""
@@ -305,8 +365,9 @@ async def get_latest_news(
         if article.published_at:
             published_at_persian = format_persian_date(article.published_at)
         
-        # Get Persian name for source
-        source_persian = SOURCE_NAMES.get(article.source, article.source)
+        # Get Persian name and color for source (robust mapping)
+        source_persian = map_source_persian_name(article.source)
+        source_color = map_source_color(article.source)
         
         # Determine text direction for title (LTR for Reuters, RTL for Persian sources)
         is_ltr = article.source in ["reuters_photos", "reuters_text"]
@@ -315,6 +376,7 @@ async def get_latest_news(
             "id": str(article.id),
             "source": article.source,  # Keep original source code for filtering
             "source_persian": source_persian,  # Persian name for display
+            "source_color": source_color,
             "title": article.title,
             "summary": article.summary,
             "url": article.url,
@@ -461,8 +523,8 @@ async def get_news_by_id(
             # If conversion fails, use original
             pass
 
-    # Get Persian name for source
-    source_persian = SOURCE_NAMES.get(article.source, article.source)
+    # Get Persian name for source (robust mapping)
+    source_persian = map_source_persian_name(article.source)
     
     # Replace S3 paths in body_html with presigned URLs
     body_html = article.body_html or ""
@@ -560,5 +622,6 @@ async def get_news_by_id(
         "category": article.category,
         "raw_category": article.raw_category,  # Original category for display
         "is_ltr": is_ltr,  # Text direction flag for title
+        "language": getattr(article, 'language', 'en'),  # Language code
     }
 

@@ -453,6 +453,7 @@ class TabnakWorker(BaseWorker):
                 
                 # Create news record
                 news = News(
+                    language="fa",  # Persian language
                     source=self.source_name,
                     title=article_data["title"],
                     body_html=article_data.get("body_html", ""),

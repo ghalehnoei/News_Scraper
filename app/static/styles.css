@@ -1169,3 +1169,35 @@ footer p {
         grid-template-columns: repeat(3, 1fr);
     }
 }
+
+/* Persian/Arabic Font Styles */
+[dir="rtl"] .news-title,
+[dir="rtl"] .news-body,
+[dir="rtl"] .news-summary,
+[dir="rtl"] .modal-news-body,
+[dir="rtl"] .modal-news-summary {
+    font-family: 'Vazir', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-weight: 400;
+}
+
+[dir="rtl"] .news-title,
+[dir="rtl"] .modal-news-title {
+    font-weight: 600;
+}
+
+[dir="rtl"] .news-body,
+[dir="rtl"] .modal-news-body {
+    font-size: 1rem;
+    line-height: 1.8;
+}
+
+/* Ensure proper RTL text alignment for Persian/Arabic content */
+[dir="rtl"] {
+    text-align: right;
+}
+
+/* Override for LTR content within RTL pages */
+[dir="ltr"] {
+    text-align: left;
+    direction: ltr;
+}

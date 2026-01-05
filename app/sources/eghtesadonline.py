@@ -350,6 +350,7 @@ class EghtesadOnlineWorker(BaseWorker):
                     image_url=article_data.get("image_url", ""),
                     category=normalized_category,
                     raw_category=raw_category,
+                    language="fa",  # Persian language
                 )
                 
                 db.add(news)

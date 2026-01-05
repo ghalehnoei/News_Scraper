@@ -914,6 +914,7 @@ class KayhanWorker(BaseWorker):
                     image_url=s3_image_url,
                     category=normalized_category,  # Store normalized category
                     raw_category=preserved_raw_category,  # Store original category
+                    language="fa",  # Persian language
                 )
 
                 db.add(news)

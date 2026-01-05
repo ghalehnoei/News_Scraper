@@ -769,6 +769,7 @@ class HamshahriWorker(BaseWorker):
                     image_url=s3_image_url,
                     category=normalized_category,
                     raw_category=preserved_raw_category,
+                    language="fa",  # Persian language
                 )
 
                 db.add(news)

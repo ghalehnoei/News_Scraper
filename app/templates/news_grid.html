@@ -102,7 +102,7 @@
                     {% endif %}
                     
                     <div class="news-content">
-                        <h2 class="news-title" dir="{{ 'rtl' if article.language == 'ar' else 'ltr' }}" style="text-align: {{ 'right' if article.language == 'ar' else 'left' }};{{ ' color: #e74c3c; font-weight: bold;' if article.is_breaking else '' }}">{{ article.title }}</h2>
+                        <h2 class="news-title" dir="{{ 'rtl' if article.language in ['ar', 'fa'] else 'ltr' }}"{% if article.is_breaking %} style="color: #e74c3c; font-weight: bold;"{% endif %}>{{ article.title }}</h2>
                     </div>
                     
                     <div class="news-footer">
@@ -127,7 +127,7 @@
                         </span>
                     </div>
                     <div class="news-title-col">
-                        <h2 class="news-title" dir="{{ 'rtl' if article.language == 'ar' else 'ltr' }}" style="text-align: {{ 'right' if article.language == 'ar' else 'left' }};{{ ' color: #e74c3c; font-weight: bold;' if article.is_breaking else '' }}">{{ article.title }}</h2>
+                        <h2 class="news-title" dir="{{ 'rtl' if article.language in ['ar', 'fa'] else 'ltr' }}"{% if article.is_breaking %} style="color: #e74c3c; font-weight: bold;"{% endif %}>{{ article.title }}</h2>
                         {% if article.raw_category or article.category_persian %}
                         <span class="news-category">
                             {% if article.raw_category %}
@@ -220,7 +220,7 @@ async function openNewsModal(newsId) {
         // Render article content
         modalBody.innerHTML = `
             <div class="modal-news-header">
-                <h1 class="modal-news-title" dir="${article.language == 'ar' ? 'rtl' : 'ltr'}" style="text-align: ${article.language == 'ar' ? 'right' : 'left'};${article.is_breaking ? ' color: #e74c3c; font-weight: bold;' : ''}">${highlightedTitle}</h1>
+                <h1 class="modal-news-title" dir="${article.language == 'ar' || article.language == 'fa' ? 'rtl' : 'ltr'}" style="text-align: ${article.language == 'ar' || article.language == 'fa' ? 'right' : 'left'};${article.is_breaking ? ' color: #e74c3c; font-weight: bold;' : ''}${article.language == 'ar' || article.language == 'fa' ? ' font-family: \'Vazir\', \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif; font-weight: 600;' : ''}">${highlightedTitle}</h1>
                 <div class="modal-news-meta">
                     <span class="news-source">${escapeHtml(article.source_persian || article.source)}</span>
                     ${article.published_at ? `<span class="news-date">${formatPersianDate(article.published_at)}</span>` : ''}
@@ -233,7 +233,7 @@ async function openNewsModal(newsId) {
                 </div>
             ` : ''}
             ${highlightedBody ? `
-                <div class="modal-news-body">
+                <div class="modal-news-body" dir="${article.language == 'ar' || article.language == 'fa' ? 'rtl' : 'ltr'}" style="${article.language == 'ar' || article.language == 'fa' ? 'font-family: \'Vazir\', \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif;' : ''}">
                     ${highlightedBody}
                 </div>
             ` : ''}
@@ -484,8 +484,10 @@ function createArticleCard(article) {
     card.onclick = () => openNewsModal(article.id);
     
     const imageUrl = article.image_url || '';
-    const sourcePersian = getSourcePersianName(article.source);
-    const sourceColor = getSourceColor(article.source);
+    // Prefer server-provided Persian name/color (from API) if present,
+    // otherwise fall back to client-side mappings.
+    const sourcePersian = article.source_persian || getSourcePersianName(article.source);
+    const sourceColor = article.source_color || getSourceColor(article.source);
     const category = article.raw_category || article.category || '';
     const publishedAt = article.published_at || '';
     
@@ -515,7 +517,7 @@ function createArticleCard(article) {
                     </div>
                 `}
                 <div class="news-content">
-                    <h2 class="news-title" dir="${article.language == 'ar' ? 'rtl' : 'ltr'}" style="text-align: ${article.language == 'ar' ? 'right' : 'left'};${article.is_breaking ? ' color: #e74c3c; font-weight: bold;' : ''}">${escapeHtml(article.title)}</h2>
+                    <h2 class="news-title" dir="${article.language == 'ar' || article.language == 'fa' ? 'rtl' : 'ltr'}" style="text-align: ${article.language == 'ar' || article.language == 'fa' ? 'right' : 'left'};${article.is_breaking ? ' color: #e74c3c; font-weight: bold;' : ''}">${escapeHtml(article.title)}</h2>
                 </div>
                 <div class="news-footer">
                     <div class="news-footer-left">
@@ -533,7 +535,7 @@ function createArticleCard(article) {
                     </span>
                 </div>
                 <div class="news-title-col">
-                    <h2 class="news-title" dir="${article.language == 'ar' ? 'rtl' : 'ltr'}" style="text-align: ${article.language == 'ar' ? 'right' : 'left'};${article.is_breaking ? ' color: #e74c3c; font-weight: bold;' : ''}">${escapeHtml(article.title)}</h2>
+                    <h2 class="news-title" dir="${article.language == 'ar' || article.language == 'fa' ? 'rtl' : 'ltr'}" style="text-align: ${article.language == 'ar' || article.language == 'fa' ? 'right' : 'left'};${article.is_breaking ? ' color: #e74c3c; font-weight: bold;' : ''}">${escapeHtml(article.title)}</h2>
                     ${category ? `<span class="news-category">${escapeHtml(category)}</span>` : ''}
                 </div>
                 <div class="news-date-col">

@@ -127,6 +127,23 @@ SOURCE_NAMES = {
     "reuters_text": "اخبار رویترز",
 }
 
+
+def map_source_persian_name(source_key: str) -> str:
+    """
+    Map a stored source key to the Persian display name.
+    Tries exact match first, then substring match against known keys to handle
+    variants like domains or suffixes stored in DB.
+    """
+    if not source_key:
+        return source_key
+    if source_key in SOURCE_NAMES:
+        return SOURCE_NAMES[source_key]
+    lowered = source_key.lower()
+    for k, v in SOURCE_NAMES.items():
+        if k in lowered:
+            return v
+    return source_key
+
 # Color codes for sources
 SOURCE_COLORS = {
     "mehrnews": "#e74c3c",  # قرمز
@@ -312,7 +329,7 @@ async def news_grid(
     # NOTE: use a different variable name to avoid shadowing the incoming `source` param
     sources_with_names = []
     for source_key in available_sources:
-        persian_name = SOURCE_NAMES.get(source_key, source_key)
+        persian_name = map_source_persian_name(source_key)
         color = SOURCE_COLORS.get(source_key, "#95a5a6")  # Default gray
         sources_with_names.append({
             "key": source_key,
@@ -416,7 +433,7 @@ async def news_grid(
         # Use raw_category for display if needed, but normalized category for filtering
         
         # Get Persian name and color for source
-        source_persian = SOURCE_NAMES.get(article.source, article.source)
+        source_persian = map_source_persian_name(article.source)
         source_color = SOURCE_COLORS.get(article.source, "#95a5a6")
         
         # Determine text direction and styling based on language and breaking news

@@ -1,0 +1,506 @@
+
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 
+SUMMARY: 
+- Structure: NML2 NEP External 
+- Based On: NML2 v2.10
+
+AUTHOR: thomsonreuters.com
+-->
+<!-- ========================================================= -->
+<newsMessage xmlns="http://iptc.org/std/nar/2006-10-01/" xmlns:rtr="http://www.reuters.com/ns/2003/08/content" xmlns:x="http://www.w3.org/1999/xhtml" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <header>
+    <sent>2026-01-06T05:25:40.000Z</sent>
+    <sender>reuters.com</sender>
+    <transmitId>tag:reuters.com,2026:newsml_RW444706012026RP1:2</transmitId>
+    <priority>4</priority>
+    <!--   Online Destinations -->
+    <destination>RSPOO</destination>
+    <!--   CDN Destinations -->
+    <destination>RSPO</destination>
+    <destination>RMON</destination>
+    <destination>VISM</destination>
+    <destination>VISP</destination>
+    <channel>VID</channel>
+  </header>
+  <itemSet>
+    <packageItem conformance="power" guid="tag:reuters.com,2026:newsml_RW444706012026RP1" standard="NewsML-G2" standardversion="2.28" version="2">
+      <catalogRef href="http://www.iptc.org/std/catalog/catalog.IPTC-G2-Standards_3.xml" />
+      <!-- scoped restrictions if any -->
+      <rightsInfo>
+        <rightsInfoExtProperty qcode="audMedia:TV" rel="extCptRel:hasMediaPermission" />
+        <rightsInfoExtProperty rel="extCptRel:hasTemporalProhibitionAfter" value="2026-01-08T04:00:00.000Z" valuedatatype="xs:dateTime" />
+      </rightsInfo>
+      <rightsInfo>
+        <rightsInfoExtProperty qcode="audMedia:ONLINE" rel="extCptRel:hasMediaPermission" />
+        <rightsInfoExtProperty rel="extCptRel:hasTemporalProhibitionAfter" value="2026-01-08T04:00:00.000Z" valuedatatype="xs:dateTime" />
+      </rightsInfo>
+      <rightsInfo>
+        <copyrightHolder literal="Thomson Reuters" />
+        <copyrightNotice xml:lang="en">(c) 2026 Thomson Reuters, unless otherwise identified. Full statement available at https://www.thomsonreuters.com/en/policies/copyright.html</copyrightNotice>
+        <usageTerms xml:lang="en">Broadcast: Maximum three (3) minutes of highlights per day in scheduled television news bulletins only, no more than 60 seconds per match. An additional two minutes of soundbites allowed. No use 24-hour sports channels. No new uses after 48 hours. (On January 8 no use after 0400GMT for Sabalenka v Bucsa and no use after 0230GMT for Keys v Kessler) No archive. No resales. No sublicensing. No monetisation. No use tennis dedicated channels. No use sports magazine programmes. No use Australia, Germany, Austria, Switzerland, Italy, the United Kingdom, the Channel Islands, the Isle of Man, Ireland, Czech Republic, Slovakia, Crimea, Iran, Cuba, North Korea, Russia, Syria, Luhansk, and Donetsk regions of Ukraine.
+Digital: Online use permitted only where a broadcaster simultaneously replicates online, in its entirety, a regularly scheduled daily television news programme which includes news coverage from the WTA in accordance with the broadcast restrictions above. Maximum three (3) minutes of highlights per day in scheduled television news bulletins only, no more than 60 seconds per match. An additional two minutes of soundbites allowed. No use Australia, Germany, Austria, Switzerland, Italy, the United Kingdom, the Channel Islands, the Isle of Man, Ireland, Czech Republic, Slovakia, Crimea, Iran, Cuba, North Korea, Russia, Syria, Luhansk, and Donetsk regions of Ukraine. The footage must be removed from the Internet 48 hours after the completion of the match. No archive. No resales. No sublicensing. No monetisation.. For Reuters customers only.</usageTerms>
+      </rightsInfo>
+      <itemMeta>
+        <itemClass qcode="icls:composite" />
+        <provider literal="reuters.com" />
+        <versionCreated>2026-01-06T05:25:47.000Z</versionCreated>
+        <firstCreated>2026-01-06T05:07:05.000Z</firstCreated>
+        <pubStatus qcode="stat:usable" />
+        <role qcode="itemRole:N" />
+        <fileName>2026-01-06T052540Z_2_RW444706012026RP1_RTRMADC_0_TENNIS-BRISBANE.XML</fileName>
+        <generator versioninfo="00.00.01">Reuters WNE</generator>
+        <profile versioninfo="01.00.01">NEP-External_ANP</profile>
+        <service qcode="svc:RTR_VID" />
+        <signal qcode="pmt:video" />
+        <signal literal="WNE v2" qcode="sic:WNE" />
+        <signal qcode="sic:ATOMIC" />
+        <signal qcode="svd:HD" />
+        <signal literal="Video Content: The content is in a raw format" qcode="sic:VIDRAWCON" />
+        <signal qcode="edStat:U" />
+        <signal qcode="var:itemEvol" />
+        <link contenttype="application/vnd.iptc.g2.packageitem+xml" rel="irel:prevVersion" residref="tag:reuters.com,2026:newsml_RW444706012026RP1" rtr:id="RW444706012026RP1" rtr:type="idType:USN" version="1" />
+        <link contenttype="application/vnd.iptc.g2.packageitem+xml" rel="irel:evolvedFrom" residref="tag:reuters.com,2026:newsml_WD444706012026RP1" rtr:id="WD444706012026RP1" rtr:type="idType:USN" version="2" />
+        <signal qcode="prodId:VID" />
+        <signal literal="Video Content: The item contains all video renditions" qcode="sic:VIDALLREN" />
+        <signal literal="Video Content: Early access script" qcode="sic:VIDEASCON" />
+        <itemMetaExtProperty rel="mediaCptRel:hasChannelList" value="sXd655 cbm126 lzl693 kym149 onc977 jjb527 Bzd359" valuedatatype="xs:NMTOKENS" />
+        <rtr:versionedId guid="tag:reuters.com,2026:newsml_RW444706012026RP1:2" />
+      </itemMeta>
+      <!-- ========================================================= -->
+      <!-- contentMeta -->
+      <contentMeta>
+        <!--=== Administrative === -->
+        <urgency>4</urgency>
+        <located literal="BRISBANE, AUSTRALIA" type="cptType:5" xml:lang="en">
+          <name xml:lang="en">BRISBANE, AUSTRALIA</name>
+        </located>
+        <infoSource literal="Reuters" qcode="NS:RTRS" role="cRole:origProv" />
+        <infoSource literal="Reuters" qcode="NS:RTRS" role="cRole:source" />
+        <creator literal="Reuters" />
+        <contributor literal="Vespa" role="cRole:lastEd" />
+        <exclAudience qcode="audMedia:RCV5" />
+        <exclAudience qcode="audMedia:RCV6" />
+        <altId rtr:isOriginal="1" type="idType:USN">RW444706012026RP1</altId>
+        <altId type="idType:editNumber">4447</altId>
+        <altId type="idType:itemId">tag:reuters.com,2026:newsml_RW444706012026RP1:2</altId>
+        <!-- === Descriptive === -->
+        <language tag="en" />
+        <genre literal="Current or spot news">
+          <name>Current or spot news</name>
+        </genre>
+        <keyword>Cristina Bucsa</keyword>
+        <keyword>Aryna Sabalenka</keyword>
+        <keyword>Madison Keys</keyword>
+        <keyword>Brisbane WTA event</keyword>
+        <keyword>McCartney Kessler</keyword>
+        <subject qcode="N2:ASIA">
+          <name>Asia / Pacific</name>
+        </subject>
+        <subject qcode="N2:SPO" type="cptType:14">
+          <name>Sport</name>
+        </subject>
+        <subject qcode="N2:TENN" type="cptType:14">
+          <name>Tennis</name>
+        </subject>
+        <subject qcode="WNSFR:SPORTS" />
+        <subject qcode="rvnServiceCode:SP">
+          <name>Sports</name>
+          <related literal="202601064447SP-TENNIS-BRISBANE_O_.xml" rel="mediaCptRel:hasLegacyFilename" />
+        </subject>
+        <subject qcode="tvsc:No-Data-Available" />
+        <subject literal="BRISBANE, AUSTRALIA" type="cptType:5" xml:lang="en">
+          <name xml:lang="en">BRISBANE, AUSTRALIA</name>
+          <facet qcode="geoProp:8" />
+          <broader qcode="N2:AU" type="cptType:5">
+            <name>Australia</name>
+            <facet qcode="geoProp:5" />
+          </broader>
+        </subject>
+        <slugline separator="-" xml:lang="en">TENNIS-BRISBANE/</slugline>
+        <headline xml:lang="en">Sabalenka, Keys kick off 2026 season with wins in Brisbane</headline>
+        <dateline xml:lang="en">JANUARY 6, 2026</dateline>
+        <by xml:lang="en">Reuters, JAN 06</by>
+        <description role="descRole:videoCaption" xml:lang="en">Sabalenka, Keys kick off 2026 season with wins in Brisbane</description>
+      </contentMeta>
+      <!-- ========================================================= -->
+      <!-- CONTENT -->
+      <!-- root  -->
+      <groupSet root="root">
+        <group id="root" role="grpRole:NEP">
+          <!-- Main -->
+          <groupRef idref="main" />
+        </group>
+        <!-- === MAIN === -->
+        <group id="main" role="grpRole:Main">
+          <itemRef contenttype="application/vnd.iptc.g2.newsitem+xml" residref="tag:reuters.com,2026:newsml_OVT444706012026RP1">
+            <itemClass qcode="icls:text" />
+            <provider literal="reuters.com" />
+            <pubStatus qcode="stat:usable" />
+            <role qcode="itemRole:N" />
+          </itemRef>
+          <itemRef contenttype="application/vnd.iptc.g2.newsitem+xml" residref="tag:reuters.com,2026:newsml_LOV444706012026RP1">
+            <itemClass qcode="icls:video" />
+            <provider literal="reuters.com" />
+            <pubStatus qcode="stat:usable" />
+            <role qcode="itemRole:N" />
+          </itemRef>
+          <itemRef contenttype="application/vnd.iptc.g2.newsitem+xml" residref="tag:reuters.com,2026:newsml_LOA444706012026RP1">
+            <itemClass qcode="icls:audio" />
+            <provider literal="reuters.com" />
+            <pubStatus qcode="stat:usable" />
+            <role qcode="itemRole:N" />
+          </itemRef>
+          <itemRef contenttype="application/vnd.iptc.g2.newsitem+xml" residref="tag:reuters.com,2026:newsml_LOP444706012026RP1">
+            <itemClass qcode="icls:picture" />
+            <provider literal="reuters.com" />
+            <pubStatus qcode="stat:usable" />
+            <role qcode="itemRole:N" />
+          </itemRef>
+          <itemRef contenttype="application/vnd.iptc.g2.newsitem+xml" residref="tag:reuters.com,2026:newsml_LWD444706012026RP1">
+            <itemClass qcode="icls:video" />
+            <provider literal="reuters.com" />
+            <pubStatus qcode="stat:usable" />
+            <role qcode="itemRole:N" />
+          </itemRef>
+        </group>
+      </groupSet>
+    </packageItem>
+    <newsItem conformance="power" guid="tag:reuters.com,2026:newsml_OVT444706012026RP1" standard="NewsML-G2" standardversion="2.28" version="2">
+      <catalogRef href="http://www.iptc.org/std/catalog/catalog.IPTC-G2-Standards_3.xml" />
+      <rightsInfo>
+        <copyrightHolder literal="Thomson Reuters" />
+        <copyrightNotice xml:lang="en">(c) 2026 Thomson Reuters, unless otherwise identified. Full statement available at https://www.thomsonreuters.com/en/policies/copyright.html</copyrightNotice>
+      </rightsInfo>
+      <itemMeta>
+        <itemClass qcode="icls:text" />
+        <provider literal="reuters.com" />
+        <versionCreated>2026-01-06T05:25:40.000Z</versionCreated>
+        <firstCreated>2026-01-06T05:07:05.000Z</firstCreated>
+        <pubStatus qcode="stat:usable" />
+        <role qcode="itemRole:N" />
+        <fileName>2026-01-06T052540Z_2_RW444706012026RP1_RTRMADC_0_TENNIS-BRISBANE.XML</fileName>
+        <generator versioninfo="00.00.01">Reuters WNE</generator>
+        <profile versioninfo="01.00.01">SNI-Text</profile>
+        <signal qcode="prodId:VID" />
+        <signal qcode="edStat:U" />
+        <link contenttype="application/vnd.iptc.g2.newsitem+xml" rel="irel:prevVersion" residref="tag:reuters.com,2026:newsml_OVT444706012026RP1" rtr:id="OVT444706012026RP1" rtr:type="idType:USN" version="1" />
+        <rtr:versionedId guid="tag:reuters.com,2026:newsml_OVT444706012026RP1:2" />
+      </itemMeta>
+      <contentMeta>
+        <urgency>4</urgency>
+        <located literal="BRISBANE, AUSTRALIA" type="cptType:5" xml:lang="en">
+          <name xml:lang="en">BRISBANE, AUSTRALIA</name>
+        </located>
+        <infoSource literal="Reuters" qcode="NS:RTRS" role="cRole:origProv" />
+        <infoSource literal="Reuters" role="cRole:source" />
+        <creator literal="Reuters" />
+        <altId rtr:isOriginal="1" type="idType:USN">OVT444706012026RP1</altId>
+        <altId type="idType:itemId">tag:reuters.com,2026:newsml_OVT444706012026RP1:2</altId>
+        <language tag="en" />
+        <by xml:lang="en">Reuters, JAN 06</by>
+        <slugline separator="-" xml:lang="en">TENNIS-BRISBANE/</slugline>
+        <headline xml:lang="en">Sabalenka, Keys kick off 2026 season with wins in Brisbane</headline>
+        <dateline xml:lang="en">JANUARY 6, 2026</dateline>
+        <description role="descRole:intro" xml:lang="en">Sabalenka, Keys kick off 2026 season with wins in Brisbane</description>
+      </contentMeta>
+      <contentSet>
+        <inlineXML contenttype="application/xhtml+xml" wordcount="31" xml:lang="en">
+          <html xmlns="http://www.w3.org/1999/xhtml">
+            <head>
+              <title />
+            </head>
+            <body>
+              <p>VIDEO SHOWS: WTA 500 BRISBANE INTERNATIONAL HIGHLIGHTS - WINS FOR ARYNA SABALENKA AND MADISON KEYS</p>
+              <p>COMPLETE SCRIPT TO FOLLOW</p>
+              <p>SHOWS: BRISBANE, AUSTRALIA (JANUARY 6, 2026) (WTA/DAZN - See restrictions)</p>
+              <p>SHOTLIST TO FOLLOW</p>
+              <p>STORY: TO FOLLOW</p>
+            </body>
+          </html>
+        </inlineXML>
+      </contentSet>
+    </newsItem>
+    <!--   Progressive videos without slate -->
+    <newsItem conformance="power" guid="tag:reuters.com,2026:newsml_LOV444706012026RP1" standard="NewsML-G2" standardversion="2.28" version="1">
+      <catalogRef href="http://www.iptc.org/std/catalog/catalog.IPTC-G2-Standards_3.xml" />
+      <rightsInfo>
+        <copyrightHolder literal="Thomson Reuters" />
+        <copyrightNotice xml:lang="en">(c) 2026 Thomson Reuters, unless otherwise identified. Full statement available at https://www.thomsonreuters.com/en/policies/copyright.html</copyrightNotice>
+      </rightsInfo>
+      <itemMeta>
+        <itemClass qcode="icls:video" />
+        <provider literal="reuters.com" />
+        <versionCreated>2026-01-06T05:25:46.000Z</versionCreated>
+        <firstCreated>2026-01-06T05:07:05.000Z</firstCreated>
+        <pubStatus qcode="stat:usable" />
+        <role qcode="itemRole:N" />
+        <fileName>2026-01-06T052540Z_2_RW444706012026RP1_RTRMADC_0_TENNIS-BRISBANE.XML</fileName>
+        <generator versioninfo="00.00.01">Reuters WNE</generator>
+        <profile versioninfo="01.00.01">SNI-Video</profile>
+        <signal literal="Progressive Video Content : The item contains progressive video renditions" qcode="sic:PROGVIDCON" />
+        <rtr:versionedId guid="tag:reuters.com,2026:newsml_LOV444706012026RP1:1" />
+      </itemMeta>
+      <contentMeta>
+        <urgency>4</urgency>
+        <infoSource literal="Reuters" qcode="NS:RTRS" role="cRole:origProv" />
+        <infoSource literal="WTA/DAZN" role="cRole:source" />
+        <creator literal="Reuters" />
+        <altId rtr:isOriginal="1" type="idType:SID">LOV444706012026RP1</altId>
+        <altId type="idType:itemId">tag:reuters.com,2026:newsml_LOV444706012026RP1:1</altId>
+        <language tag="en" />
+        <by xml:lang="en">WTA/DAZN, JAN 06</by>
+        <description role="descRole:audio" xml:lang="en">NATURAL</description>
+      </contentMeta>
+      <contentSet>
+        <!-- Old Online without 3GP and 3GPP2 -->
+        <remoteContent audiobitrate="128000" audiosamplerate="44100" contenttype="video/mpeg" duration="190" format="fmt:H264/mpeg" height="720" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:5128:16X9:MP4" rendition="rend:stream:5128:16x9:mp4" residref="tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:5128:16X9:MP4" version="1" videoaspectratio="16:9" videoavgbitrate="5000000" width="1280">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOV444706012026RP1_RTRMADV_STREAM-5128-16X9-MP4_TENNIS-BRISBANE.MP4</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:5128:16X9:MP4</rtr:altLoc>
+        </remoteContent>
+        <remoteContent audiobitrate="128000" audiosamplerate="44100" contenttype="video/mpeg" duration="190" format="fmt:H264/mpeg" height="432" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:2000:16X9:MP4" rendition="rend:stream:2000:16x9:mp4" residref="tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:2000:16X9:MP4" version="1" videoaspectratio="16:9" videoavgbitrate="1872000" width="768">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOV444706012026RP1_RTRMADV_STREAM-2000-16X9-MP4_TENNIS-BRISBANE.MP4</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:2000:16X9:MP4</rtr:altLoc>
+        </remoteContent>
+        <remoteContent audiobitrate="76000" audiosamplerate="44100" contenttype="video/mpeg" duration="190" format="fmt:H264/mpeg" height="360" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:700:16X9:MP4" rendition="rend:stream:700:16x9:mp4" residref="tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:700:16X9:MP4" version="1" videoaspectratio="16:9" videoavgbitrate="624000" width="640">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOV444706012026RP1_RTRMADV_STREAM-700-16X9-MP4_TENNIS-BRISBANE.MP4</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:700:16X9:MP4</rtr:altLoc>
+        </remoteContent>
+        <remoteContent audiobitrate="256000" audiosamplerate="44100" contenttype="video/mpeg" duration="190" format="fmt:H264/mpeg" height="1080" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:8256M:16X9:MP4" rendition="rend:stream:8256m:16x9:mp4" residref="tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:8256M:16X9:MP4" version="1" videoaspectratio="16:9" videoavgbitrate="8000000" width="1920">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOV444706012026RP1_RTRMADV_STREAM-8256M-16X9-MP4_TENNIS-BRISBANE.MP4</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:8256M:16X9:MP4</rtr:altLoc>
+        </remoteContent>
+        <remoteContent audiobitrate="256000" audiosamplerate="48000" contenttype="video/mpeg" duration="190" format="fmt:mpeg" height="576" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:6756:16X9:MPG" rendition="rend:stream:6756:16x9:mpg" residref="tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:6756:16X9:MPG" version="1" videoaspectratio="16:9" videoavgbitrate="6500000" width="720">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOV444706012026RP1_RTRMADV_STREAM-6756-16X9-MPG_TENNIS-BRISBANE.MPG</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:6756:16X9:MPG</rtr:altLoc>
+        </remoteContent>
+        <remoteContent audiobitrate="256000" audiosamplerate="44100" contenttype="video/mpeg" duration="190" format="fmt:H264/mpeg" height="1080" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:8256:16X9:MP4" rendition="rend:stream:8256:16x9:mp4" residref="tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:8256:16X9:MP4" version="1" videoaspectratio="16:9" videoavgbitrate="8000000" width="1920">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOV444706012026RP1_RTRMADV_STREAM-8256-16X9-MP4_TENNIS-BRISBANE.MP4</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:8256:16X9:MP4</rtr:altLoc>
+        </remoteContent>
+        <remoteContent audiobitrate="256000" audiosamplerate="48000" contenttype="video/mp4" duration="190" format="fmt:H264/mpeg" height="720" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:1756:16X9:MP4" rendition="rend:stream:1756:16x9:mp4" residref="tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:1756:16X9:MP4" version="1" videoaspectratio="16:9" videoavgbitrate="1500000" width="1280">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOV444706012026RP1_RTRMADV_STREAM-1756-16X9-MP4_TENNIS-BRISBANE.MP4</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOV444706012026RP1-STREAM:1756:16X9:MP4</rtr:altLoc>
+        </remoteContent>
+      </contentSet>
+    </newsItem>
+    <!--   Interlaced videos may have slate -->
+    <newsItem conformance="power" guid="tag:reuters.com,2026:newsml_LWD444706012026RP1" standard="NewsML-G2" standardversion="2.28" version="1" xml:lang="en">
+      <catalogRef href="http://www.iptc.org/std/catalog/catalog.IPTC-G2-Standards_3.xml" />
+      <rightsInfo>
+        <copyrightHolder literal="Thomson Reuters" />
+        <copyrightNotice xml:lang="en">(c) 2026 Thomson Reuters, unless otherwise identified. Full statement available at https://www.thomsonreuters.com/en/policies/copyright.html</copyrightNotice>
+      </rightsInfo>
+      <itemMeta>
+        <itemClass qcode="icls:video" />
+        <provider literal="reuters.com" />
+        <versionCreated>2026-01-06T05:25:46.000Z</versionCreated>
+        <firstCreated>2026-01-06T05:07:05.000Z</firstCreated>
+        <pubStatus qcode="stat:usable" />
+        <role qcode="itemRole:N" />
+        <fileName>2026-01-06T052540Z_2_RW444706012026RP1_RTRMADC_0_TENNIS-BRISBANE.XML</fileName>
+        <generator versioninfo="00.00.01">Reuters Video Online</generator>
+        <profile versioninfo="01.00.01">SNI-Video</profile>
+        <signal qcode="sar:widescreen">
+          <name>Native widescreen 16:9</name>
+        </signal>
+        <signal qcode="svd:HD" />
+        <signal qcode="sic:HDCON" />
+        <signal literal="Slated Content : The item contains a slate at the start video" qcode="sic:SLATECON" />
+        <signal literal="Interlaced Video Content : The item contains interlaced video renditions" qcode="sic:INTVIDCON" />
+        <rtr:versionedId guid="tag:reuters.com,2026:newsml_LWD444706012026RP1:1" />
+      </itemMeta>
+      <contentMeta>
+        <urgency>4</urgency>
+        <infoSource literal="Reuters" qcode="NS:RTRS" role="cRole:origProv" />
+        <infoSource literal="WTA/DAZN" role="cRole:source" />
+        <creator literal="Reuters" />
+        <!-- === Descriptive === -->
+        <altId rtr:isOriginal="1" type="idType:SID">LWD444706012026RP1</altId>
+        <altId type="idType:itemId">tag:reuters.com,2026:newsml_LWD444706012026RP1:1</altId>
+        <language tag="en" />
+        <by xml:lang="en">WTA/DAZN, JAN 06</by>
+        <description role="descRole:audio" xml:lang="en">NATURAL</description>
+      </contentMeta>
+      <partMeta>
+        <timeDelim end="00:00:05.000" start="00:00:00.000" timeunit="timeunit:normalPlayTime" />
+        <rtr:role qcode="partRole:slate" />
+      </partMeta>
+      <partMeta>
+        <timeDelim end="00:03:15.000" start="00:00:05.000" timeunit="timeunit:normalPlayTime" />
+        <rtr:role qcode="partRole:content" />
+      </partMeta>
+      <partMeta>
+        <timeDelim end="00:00:11.000" start="00:00:10.000" timeunit="timeunit:normalPlayTime" />
+        <rtr:role qcode="partRole:keyframe" />
+      </partMeta>
+      <!-- ========================================================= -->
+      <!-- CONTENT -->
+      <contentSet>
+        <remoteContent audiobitrate="256000" audiocodec="acdc:c016" audiosamplerate="48000" audiosamplesize="16" audiovbr="false" contenttype="video/mpeg" duration="195" format="fmt:mpeg" height="480" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:6756:16X9:SD525I30:MPG" rendition="rend:stream:6756:16x9:sd525i30:mpg" residref="tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:6756:16X9:SD525I30:MPG" rtr:definition="videoDef:SD" version="1" videoaspectratio="16:9" videoavgbitrate="6500000" videocodec="vcdc:c019" videodefinition="videodef:SD" videoframerate="29.97" videosampling="4:2:0" videoscan="interlaced" videovbr="false">
+          <rtr:signal qcode="sic:SD525CON" />
+          <rtr:altId contentType="video/mpeg" isPresent="1" type="idType:fileBIN">2026-01-06T050705Z_1_LWD444706012026RP1_RTRWNEV_A_4447-TENNIS-BRISBANE.MPG</rtr:altId>
+          <rtr:altId contentType="video/mpeg" isPresent="1" type="idType:fileBIN-Len65">202601064447SP-TENNIS-BRISBANE_O_.mpg</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:6756:16X9:SD525I30:MPG</rtr:altLoc>
+        </remoteContent>
+        <remoteContent audiobitrate="256000" audiocodec="acdc:c016" audiosamplerate="48000" audiosamplesize="16" audiovbr="false" contenttype="video/mpeg" duration="195" format="fmt:mpeg" height="576" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:6756:16X9:SD625I25:MPG" rendition="rend:stream:6756:16x9:sd625i25:mpg" residref="tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:6756:16X9:SD625I25:MPG" rtr:definition="videoDef:SD" version="1" videoaspectratio="16:9" videoavgbitrate="6500000" videocodec="vcdc:c019" videodefinition="videodef:SD" videoframerate="25" videosampling="4:2:0" videoscan="interlaced" videovbr="false">
+          <rtr:signal qcode="sic:SD625CON" />
+          <rtr:altId contentType="video/mpeg" isPresent="1" type="idType:fileBIN">2026-01-06T050705Z_1_LWD444706012026RP1_RTRWNEV_B_4447-TENNIS-BRISBANE.MPG</rtr:altId>
+          <rtr:altId contentType="video/mpeg" isPresent="1" type="idType:fileBIN-Len65">202601064447SP-TENNIS-BRISBANE_O_.mpg</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:6756:16X9:SD625I25:MPG</rtr:altLoc>
+        </remoteContent>
+        <remoteContent audiobitrate="256000" audiocodec="acdc:c028" audiosamplerate="48000" audiosamplesize="16" audiovbr="false" contenttype="video/mp4" duration="195" format="fmt:mp4" height="1080" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:13756:16X9:HD1080I50:MP4" rendition="rend:stream:13756:16x9:hd1080i50:mp4" residref="tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:13756:16X9:HD1080I50:MP4" rtr:definition="videoDef:HD" version="1" videoaspectratio="16:9" videoavgbitrate="13500000" videocodec="vcdc:c190" videodefinition="videodef:HD" videoframerate="25" videosampling="4:2:0" videoscan="interlaced" videovbr="true">
+          <rtr:signal qcode="sic:HD50CON" />
+          <rtr:altId contentType="video/mp4" isPresent="1" type="idType:fileBIN">2026-01-06T050705Z_1_LWD444706012026RP1_RTRWNEV_C_4447-TENNIS-BRISBANE.MP4</rtr:altId>
+          <rtr:altId contentType="video/mp4" isPresent="1" type="idType:fileBIN-Len65">202601064447SP-TENNIS-BRISBANE_O_.mp4</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:13756:16X9:HD1080I50:MP4</rtr:altLoc>
+        </remoteContent>
+        <remoteContent audiobitrate="256000" audiocodec="acdc:c028" audiosamplerate="48000" audiosamplesize="16" audiovbr="false" contenttype="video/mp4" duration="195" format="fmt:mp4" height="1080" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:13756:16X9:HD1080I60:MP4" rendition="rend:stream:13756:16x9:hd1080i60:mp4" residref="tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:13756:16X9:HD1080I60:MP4" rtr:definition="videoDef:HD" version="1" videoaspectratio="16:9" videoavgbitrate="13500000" videocodec="vcdc:c190" videodefinition="videodef:HD" videoframerate="29.97" videosampling="4:2:0" videoscan="interlaced" videovbr="true">
+          <rtr:signal qcode="sic:HD60CON" />
+          <rtr:altId contentType="video/mp4" isPresent="1" type="idType:fileBIN">2026-01-06T050705Z_1_LWD444706012026RP1_RTRWNEV_D_4447-TENNIS-BRISBANE.MP4</rtr:altId>
+          <rtr:altId contentType="video/mp4" isPresent="1" type="idType:fileBIN-Len65">202601064447SP-TENNIS-BRISBANE_O_.mp4</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:13756:16X9:HD1080I60:MP4</rtr:altLoc>
+        </remoteContent>
+        <remoteContent audiobitrate="128000" audiocodec="acdc:c028" audiosamplerate="44100" audiosamplesize="16" audiovbr="false" contenttype="video/mp4" duration="195" format="fmt:mp4" height="486" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:2128:16X9:MP4" rendition="rend:stream:2128:16x9:mp4" residref="tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:2128:16X9:MP4" rtr:definition="videoDef:HD" version="1" videoaspectratio="16:9" videoavgbitrate="2000000" videocodec="vcdc:c153" videodefinition="videodef:HD" videoframerate="25" videosampling="4:2:0" videoscan="progressive" videovbr="false">
+          <rtr:signal qcode="sic:PVCON" />
+          <rtr:altId contentType="video/mp4" isPresent="1" type="idType:fileBIN">2026-01-06T050705Z_1_LWD444706012026RP1_RTRWNEV_F_4447-TENNIS-BRISBANE.MP4</rtr:altId>
+          <rtr:altId contentType="video/mp4" isPresent="1" type="idType:fileBIN-Len65">202601064447SP-TENNIS-BRISBANE_O_.mp4</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:2128:16X9:MP4</rtr:altLoc>
+        </remoteContent>
+        <remoteContent audiobitrate="256000" audiocodec="acdc:c028" audiosamplerate="48000" audiosamplesize="16" audiovbr="true" contenttype="video/mp4" duration="195" format="fmt:mp4" height="720" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:1756:16X9:MP4" rendition="rend:stream:1756:16x9:mp4" residref="tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:1756:16X9:MP4" rtr:definition="videoDef:HD" version="1" videoaspectratio="16:9" videoavgbitrate="1500000" videocodec="vcdc:c153" videodefinition="videodef:HD" videoframerate="50" videosampling="4:2:0" videoscan="progressive" videovbr="true">
+          <rtr:signal qcode="sic:SCRNCON" />
+          <rtr:altId contentType="video/mp4" isPresent="1" type="idType:fileBIN">2026-01-06T050705Z_1_LWD444706012026RP1_RTRWNEV_T_4447-TENNIS-BRISBANE.MP4</rtr:altId>
+          <rtr:altId contentType="video/mp4" isPresent="1" type="idType:fileBIN-Len65">202601064447SP-TENNIS-BRISBANE_O_.mp4</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LWD444706012026RP1-STREAM:1756:16X9:MP4</rtr:altLoc>
+        </remoteContent>
+      </contentSet>
+    </newsItem>
+    <newsItem conformance="power" guid="tag:reuters.com,2026:newsml_LOA444706012026RP1" standard="NewsML-G2" standardversion="2.28" version="1">
+      <catalogRef href="http://www.iptc.org/std/catalog/catalog.IPTC-G2-Standards_3.xml" />
+      <rightsInfo>
+        <copyrightHolder literal="Thomson Reuters" />
+        <copyrightNotice xml:lang="en">(c) 2026 Thomson Reuters, unless otherwise identified. Full statement available at https://www.thomsonreuters.com/en/policies/copyright.html</copyrightNotice>
+      </rightsInfo>
+      <itemMeta>
+        <itemClass qcode="icls:audio" />
+        <provider literal="reuters.com" />
+        <versionCreated>2026-01-06T05:25:46.000Z</versionCreated>
+        <firstCreated>2026-01-06T05:07:05.000Z</firstCreated>
+        <pubStatus qcode="stat:usable" />
+        <role qcode="itemRole:N" />
+        <fileName>2026-01-06T052540Z_2_RW444706012026RP1_RTRMADC_0_TENNIS-BRISBANE.XML</fileName>
+        <generator versioninfo="00.00.01">Reuters Video Online</generator>
+        <profile versioninfo="01.00.01">SNI-Audio</profile>
+        <rtr:versionedId guid="tag:reuters.com,2026:newsml_LOA444706012026RP1:1" />
+      </itemMeta>
+      <contentMeta>
+        <urgency>4</urgency>
+        <infoSource literal="Reuters" qcode="NS:RTRS" role="cRole:origProv" />
+        <creator literal="Reuters" />
+        <altId rtr:isOriginal="1" type="idType:SID">LOA444706012026RP1</altId>
+        <altId type="idType:itemId">tag:reuters.com,2026:newsml_LOA444706012026RP1:1</altId>
+        <contentMetaExtProperty qcode="audioNature:naturalSound" rel="mediaCptRel:hasAudioNature" />
+        <language tag="en" />
+        <by xml:lang="en">WTA/DAZN, JAN 06</by>
+      </contentMeta>
+      <contentSet>
+        <remoteContent audiosamplerate="22050" contenttype="audio/mpeg" duration="190" format="fmt:mpeg" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOA444706012026RP1-STREAM:22.050:MP3" rendition="rend:stream:22.050:mp3" residref="tag:reuters.com,2026:binary_LOA444706012026RP1-STREAM:22.050:MP3" version="1">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOA444706012026RP1_RTRMADA_STREAM-22-050-MP3_TENNIS-BRISBANE.MP3</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOA444706012026RP1-STREAM:22.050:MP3</rtr:altLoc>
+          <remoteContentExtProperty qcode="audioNature:naturalSound" rel="mediaCptRel:hasAudioNature" />
+        </remoteContent>
+        <remoteContent audiosamplerate="48000" contenttype="audio/mpeg" duration="190" format="fmt:mpeg" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOA444706012026RP1-STREAM:48000:MP3" rendition="rend:stream:48000:mp3" residref="tag:reuters.com,2026:binary_LOA444706012026RP1-STREAM:48000:MP3" version="1">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOA444706012026RP1_RTRMADA_STREAM-48000-MP3_TENNIS-BRISBANE.MP3</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOA444706012026RP1-STREAM:48000:MP3</rtr:altLoc>
+          <remoteContentExtProperty qcode="audioNature:naturalSound" rel="mediaCptRel:hasAudioNature" />
+        </remoteContent>
+        <remoteContent audiosamplerate="48000" contenttype="audio/aac" duration="190" format="fmt:aac" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOA444706012026RP1-STREAM:48000:M4A" rendition="rend:stream:48000:m4a" residref="tag:reuters.com,2026:binary_LOA444706012026RP1-STREAM:48000:M4A" version="1">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOA444706012026RP1_RTRMADA_STREAM-48000-M4A_TENNIS-BRISBANE.M4A</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOA444706012026RP1-STREAM:48000:M4A</rtr:altLoc>
+          <remoteContentExtProperty qcode="audioNature:naturalSound" rel="mediaCptRel:hasAudioNature" />
+        </remoteContent>
+        <remoteContent audiosamplerate="48000" contenttype="audio/wav" duration="190" format="fmt:wav" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOA444706012026RP1-STREAM:48000:WAV" rendition="rend:stream:48000:wav" residref="tag:reuters.com,2026:binary_LOA444706012026RP1-STREAM:48000:WAV" version="1">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOA444706012026RP1_RTRMADA_STREAM-48000-WAV_TENNIS-BRISBANE.WAV</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOA444706012026RP1-STREAM:48000:WAV</rtr:altLoc>
+          <remoteContentExtProperty qcode="audioNature:naturalSound" rel="mediaCptRel:hasAudioNature" />
+        </remoteContent>
+        <remoteContent audiosamplerate="48000" contenttype="audio/wav" duration="190" format="fmt:wav" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOA444706012026RP1-STREAM:48000M:WAV" rendition="rend:stream:48000m:wav" residref="tag:reuters.com,2026:binary_LOA444706012026RP1-STREAM:48000M:WAV" version="1">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOA444706012026RP1_RTRMADA_STREAM-48000M-WAV_TENNIS-BRISBANE.WAV</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOA444706012026RP1-STREAM:48000M:WAV</rtr:altLoc>
+          <remoteContentExtProperty qcode="audioNature:naturalSound" rel="mediaCptRel:hasAudioNature" />
+        </remoteContent>
+        <remoteContent audiosamplerate="48000" contenttype="audio/mpeg" duration="190" format="fmt:mpeg" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOA444706012026RP1-PREVIEW:48000:MP3" rendition="rend:preview:48000:mp3" residref="tag:reuters.com,2026:binary_LOA444706012026RP1-PREVIEW:48000:MP3" version="1">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOA444706012026RP1_RTRMADA_PREVIEW-48000-MP3_TENNIS-BRISBANE.MP3</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOA444706012026RP1-PREVIEW:48000:MP3</rtr:altLoc>
+          <remoteContentExtProperty qcode="audioNature:naturalSound" rel="mediaCptRel:hasAudioNature" />
+        </remoteContent>
+      </contentSet>
+    </newsItem>
+    <newsItem conformance="power" guid="tag:reuters.com,2026:newsml_LOP444706012026RP1" standard="NewsML-G2" standardversion="2.28" version="1">
+      <catalogRef href="http://www.iptc.org/std/catalog/catalog.IPTC-G2-Standards_3.xml" />
+      <rightsInfo>
+        <copyrightHolder literal="Thomson Reuters" />
+        <copyrightNotice xml:lang="en">(c) 2026 Thomson Reuters, unless otherwise identified. Full statement available at https://www.thomsonreuters.com/en/policies/copyright.html</copyrightNotice>
+      </rightsInfo>
+      <itemMeta>
+        <itemClass qcode="icls:picture" />
+        <provider literal="reuters.com" />
+        <versionCreated>2026-01-06T05:25:46.000Z</versionCreated>
+        <firstCreated>2026-01-06T05:07:05.000Z</firstCreated>
+        <pubStatus qcode="stat:usable" />
+        <role qcode="itemRole:N" />
+        <fileName>2026-01-06T052540Z_2_RW444706012026RP1_RTRMADC_0_TENNIS-BRISBANE.XML</fileName>
+        <generator versioninfo="00.00.01">Reuters Video Online</generator>
+        <profile versioninfo="01.00.01">SNI-Picture</profile>
+        <rtr:versionedId guid="tag:reuters.com,2026:newsml_LOP444706012026RP1:1" />
+      </itemMeta>
+      <contentMeta>
+        <urgency>4</urgency>
+        <infoSource literal="Reuters" qcode="NS:RTRS" role="cRole:origProv" />
+        <creator literal="Reuters" />
+        <altId rtr:isOriginal="1" type="idType:IID">LOP444706012026RP1</altId>
+        <altId type="idType:itemId">tag:reuters.com,2026:newsml_LOP444706012026RP1:1</altId>
+        <language tag="en" />
+        <by xml:lang="en">WTA/DAZN, JAN 06</by>
+      </contentMeta>
+      <contentSet>
+        <remoteContent contenttype="image/jpeg" format="fmt:jpegBaseline" height="432" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LWD444706012026RP1-VIEWIMAGE:768X432" rendition="rend:viewImage:768x432" residref="tag:reuters.com,2026:binary_LWD444706012026RP1-VIEWIMAGE:768X432" version="1" width="768">
+          <rtr:signal qcode="sic:KFCON" />
+          <rtr:altId contentType="image/jpeg" isPresent="1" type="idType:fileBIN">2026-01-06T050705Z_1_LWD444706012026RP1_RTRWNEV_E_4447-TENNIS-BRISBANE.JPG</rtr:altId>
+          <rtr:altId contentType="image/jpeg" isPresent="1" type="idType:fileBIN-Len65">202601064447SP-TENNIS-BRISBANE_O_.jpg</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LWD444706012026RP1-VIEWIMAGE:768X432</rtr:altLoc>
+        </remoteContent>
+        <remoteContent contenttype="image/jpeg" format="fmt:jpegBaseline" height="240" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LWD444706012026RP1-THUMBNAILGRID" rendition="rend:thumbnailgrid" residref="tag:reuters.com,2026:binary_LWD444706012026RP1-THUMBNAILGRID" version="1" width="0">
+          <rtr:signal qcode="sic:TNGCON" />
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LWD444706012026RP1_RTRWNEV_U_4447-TENNIS-BRISBANE.JPG</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LWD444706012026RP1-THUMBNAILGRID</rtr:altLoc>
+          <remoteContentExtProperty rel="mediaCptRel:hasThumbnailWidth" value="427" valuedatatype="xs:positiveInteger" />
+          <remoteContentExtProperty rel="mediaCptRel:hasThumbnailHeight" value="240" valuedatatype="xs:positiveInteger" />
+          <remoteContentExtProperty rel="mediaCptRel:hasThumbnailInterval" value="0" valuedatatype="xs:positiveInteger" />
+          <remoteContentExtProperty rel="mediaCptRel:hasThumbnailDuration" value="190" valuedatatype="xs:positiveInteger" />
+        </remoteContent>
+        <remoteContent contenttype="image/jpeg" format="fmt:jpegBaseline" height="288" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOP444706012026RP1-VIEWIMAGE:512X288" rendition="rend:viewImage:512x288" residref="tag:reuters.com,2026:binary_LOP444706012026RP1-VIEWIMAGE:512X288" version="1" width="512">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOP444706012026RP1_RTRMADP_VIEWIMAGE-512X288_TENNIS-BRISBANE.JPG</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOP444706012026RP1-VIEWIMAGE:512X288</rtr:altLoc>
+        </remoteContent>
+        <remoteContent contenttype="image/jpeg" format="fmt:jpegBaseline" height="240" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOP444706012026RP1-THUMBNAILGRID" rendition="rend:thumbnailgrid" residref="tag:reuters.com,2026:binary_LOP444706012026RP1-THUMBNAILGRID" version="1" width="0">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOP444706012026RP1_RTRMADP_THUMBNAILGRID_TENNIS-BRISBANE.JPG</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOP444706012026RP1-THUMBNAILGRID</rtr:altLoc>
+          <remoteContentExtProperty rel="mediaCptRel:hasThumbnailWidth" value="427" valuedatatype="xs:positiveInteger" />
+          <remoteContentExtProperty rel="mediaCptRel:hasThumbnailHeight" value="240" valuedatatype="xs:positiveInteger" />
+          <remoteContentExtProperty rel="mediaCptRel:hasThumbnailInterval" value="0" valuedatatype="xs:positiveInteger" />
+          <remoteContentExtProperty rel="mediaCptRel:hasThumbnailDuration" value="190" valuedatatype="xs:positiveInteger" />
+        </remoteContent>
+        <remoteContent contenttype="image/jpeg" format="fmt:jpegBaseline" height="90" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOP444706012026RP1-THUMBNAIL:160X90" rendition="rend:thumbnail:160x90" residref="tag:reuters.com,2026:binary_LOP444706012026RP1-THUMBNAIL:160X90" version="1" width="160">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOP444706012026RP1_RTRMADP_THUMBNAIL-160X90_TENNIS-BRISBANE.JPG</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOP444706012026RP1-THUMBNAIL:160X90</rtr:altLoc>
+        </remoteContent>
+        <remoteContent contenttype="image/jpeg" format="fmt:jpegBaseline" height="540" href="http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOP444706012026RP1-BASEIMAGE:960X540" rendition="rend:baseImage:960x540" residref="tag:reuters.com,2026:binary_LOP444706012026RP1-BASEIMAGE:960X540" version="1" width="960">
+          <rtr:altId type="idType:fileBIN">2026-01-06T050705Z_1_LOP444706012026RP1_RTRMADP_BASEIMAGE-960X540_TENNIS-BRISBANE.JPG</rtr:altId>
+          <rtr:altLoc role="locRole:auth" type="locType:http">http://content.reuters.com/auth-server/content/tag:reuters.com,2026:newsml_RW444706012026RP1:2/tag:reuters.com,2026:binary_LOP444706012026RP1-BASEIMAGE:960X540</rtr:altLoc>
+        </remoteContent>
+      </contentSet>
+    </newsItem>
+  </itemSet>
+</newsMessage>
+

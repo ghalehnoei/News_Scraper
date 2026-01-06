@@ -26,23 +26,17 @@ router = APIRouter(prefix="/ui", tags=["ui"])
 
 
 async def process_body_html_images(body_html: str) -> str:
-    """Process body_html to convert S3 keys in img src to presigned URLs."""
+    """Process body_html to convert S3 keys in img src and video source to presigned URLs."""
     if not body_html:
         return body_html
     
-    # Find all img tags with src attribute
-    img_pattern = re.compile(r'<img\s+([^>]*?)src=["\']([^"\']+)["\']([^>]*?)>', re.IGNORECASE)
-    
-    async def replace_img(match):
-        before_src = match.group(1)
-        src_url = match.group(2)
-        after_src = match.group(3)
-        
+    async def process_s3_url(src_url: str) -> Optional[str]:
+        """Process a URL and convert S3 key to presigned URL if needed."""
         # Skip if already a full URL (http/https) or data URL
         if src_url.startswith(('http://', 'https://', 'data:', '//')):
             # Check if it's a Reuters token URL that needs to be kept as-is
             if 'token=' in src_url:
-                return match.group(0)  # Keep original
+                return None  # Keep original
             # If it's an http URL without token, it might be an S3 endpoint URL
             # Try to extract key and convert to presigned
             if src_url.startswith(settings.s3_endpoint):
@@ -55,7 +49,7 @@ async def process_body_html_images(body_html: str) -> str:
                         if src_url.startswith(prefix):
                             s3_key = src_url[len(prefix):].lstrip("/")
                         else:
-                            return match.group(0)  # Can't extract key
+                            return None  # Can't extract key
                     
                     # Remove query string from S3 key
                     if '?' in s3_key:
@@ -63,11 +57,11 @@ async def process_body_html_images(body_html: str) -> str:
                     
                     presigned = await generate_presigned_url(s3_key)
                     if presigned:
-                        return f'<img {before_src}src="{presigned}"{after_src}>'
+                        return presigned
                 except Exception as e:
                     logger.debug(f"Failed to process S3 endpoint URL in body_html: {e}")
             
-            return match.group(0)  # Keep original
+            return None  # Keep original
         
         # Process S3 key or s3:// URL
         try:
@@ -88,16 +82,65 @@ async def process_body_html_images(body_html: str) -> str:
             
             presigned = await generate_presigned_url(s3_key)
             if presigned:
-                return f'<img {before_src}src="{presigned}"{after_src}>'
+                return presigned
         except Exception as e:
             logger.debug(f"Failed to process S3 key in body_html: {e}")
         
+        return None  # Keep original if processing fails
+    
+    # Find all img tags with src attribute
+    img_pattern = re.compile(r'<img\s+([^>]*?)src=["\']([^"\']+)["\']([^>]*?)>', re.IGNORECASE)
+    
+    async def replace_img(match):
+        before_src = match.group(1)
+        src_url = match.group(2)
+        after_src = match.group(3)
+        
+        presigned = await process_s3_url(src_url)
+        if presigned:
+            return f'<img {before_src}src="{presigned}"{after_src}>'
+        return match.group(0)  # Keep original if processing fails
+    
+    # Find all video source tags with src attribute
+    video_source_pattern = re.compile(r'<source\s+([^>]*?)src=["\']([^"\']+)["\']([^>]*?)>', re.IGNORECASE)
+    
+    async def replace_video_source(match):
+        before_src = match.group(1)
+        src_url = match.group(2)
+        after_src = match.group(3)
+        
+        presigned = await process_s3_url(src_url)
+        if presigned:
+            return f'<source {before_src}src="{presigned}"{after_src}>'
+        return match.group(0)  # Keep original if processing fails
+    
+    # Find all video tags with poster attribute
+    video_poster_pattern = re.compile(r'<video\s+([^>]*?)poster=["\']([^"\']+)["\']([^>]*?)>', re.IGNORECASE)
+    
+    async def replace_video_poster(match):
+        before_poster = match.group(1)
+        poster_url = match.group(2)
+        after_poster = match.group(3)
+        
+        presigned = await process_s3_url(poster_url)
+        if presigned:
+            return f'<video {before_poster}poster="{presigned}"{after_poster}>'
         return match.group(0)  # Keep original if processing fails
     
     # Process all img tags
     processed_html = body_html
-    for match in img_pattern.finditer(body_html):
+    for match in img_pattern.finditer(processed_html):
         replacement = await replace_img(match)
+        processed_html = processed_html.replace(match.group(0), replacement, 1)
+    
+    # Process all video source tags
+    for match in video_source_pattern.finditer(processed_html):
+        replacement = await replace_video_source(match)
+        processed_html = processed_html.replace(match.group(0), replacement, 1)
+    
+    # Process all video poster attributes
+    for match in video_poster_pattern.finditer(processed_html):
+        replacement = await replace_video_poster(match)
         processed_html = processed_html.replace(match.group(0), replacement, 1)
     
     return processed_html
@@ -125,6 +168,7 @@ SOURCE_NAMES = {
     "eghtesadonline": "اقتصادآنلاین",
     "reuters_photos": "عکس‌های رویترز",
     "reuters_text": "اخبار رویترز",
+    "reuters_video": "ویدئوهای رویترز",
 }
 
 
@@ -167,6 +211,7 @@ SOURCE_COLORS = {
     "eghtesadonline": "#27ae60", # سبز
     "reuters_photos": "#c0392b", # قرمز تیره
     "reuters_text": "#c0392b", # قرمز تیره (مشابه photos)
+    "reuters_video": "#c0392b", # قرمز تیره (مشابه photos و text)
 }
 
 # Persian names for normalized categories
@@ -356,69 +401,81 @@ async def news_grid(
         image_url = article.image_url
         if image_url:
             try:
-                # Remove query string and fragment from URL before processing
-                # This prevents duplicate query strings when URL is already presigned
-                parsed = urlparse(image_url)
-                
-                # Decode URL-encoded path to handle cases where query string is encoded in path
-                decoded_path = unquote(parsed.path)
-                
-                # Remove query string from decoded path if it exists
-                if '?' in decoded_path:
-                    decoded_path = decoded_path.split('?')[0]
-                
-                # Reconstruct URL without query string and fragment
-                clean_url = urlunparse((parsed.scheme, parsed.netloc, decoded_path, '', '', ''))
-                
-                # Extract S3 key from URL
-                # Stored format can be:
-                # 1. s3://bucket/path (e.g., s3://output/news-images/iribnews/2025/12/30/abc123.jpg)
-                # 2. {endpoint}/{bucket}/{key} (e.g., https://gpmedia.iribnews.ir/output/news-images/...)
-                # 3. Just the key (e.g., news-images/iribnews/2025/12/30/abc123.jpg)
-                if clean_url.startswith("s3://"):
-                    # Parse s3://bucket/path format
-                    # Remove "s3://" prefix
-                    path_after_s3 = clean_url[5:]  # Remove "s3://"
-                    # Split bucket and key
-                    parts = path_after_s3.split("/", 1)
-                    if len(parts) == 2:
-                        path_bucket, s3_key = parts
-                        # Use the path after bucket as key (regardless of bucket name)
-                        s3_key = s3_key
-                    else:
-                        # No path after bucket, this shouldn't happen but use as-is
-                        s3_key = path_after_s3
-                    logger.debug(f"Extracted S3 key from s3:// URL: {s3_key}")
-                elif clean_url.startswith(settings.s3_endpoint):
-                    # Remove endpoint and bucket to get the key
-                    prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}/"
-                    if clean_url.startswith(prefix):
-                        s3_key = clean_url[len(prefix):]
-                    else:
-                        # Try without trailing slash
-                        prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}"
-                        if clean_url.startswith(prefix):
-                            s3_key = clean_url[len(prefix):].lstrip("/")
-                        else:
-                            # Path might have bucket name duplicated, try to extract key
-                            # Example: https://gpmedia.nrms.ir/news-images/news-images/mashreghnews/...
-                            path_parts = decoded_path.lstrip("/").split("/")
-                            if len(path_parts) > 1 and path_parts[0] == path_parts[1]:
-                                # Bucket name is duplicated, skip first occurrence
-                                s3_key = "/".join(path_parts[1:])
-                            else:
-                                s3_key = decoded_path.lstrip("/")
+                # Check if it's already a presigned URL (has query parameters with signature)
+                if '?' in image_url and ('X-Amz-Signature' in image_url or 'signature' in image_url.lower()):
+                    # Already presigned, use as-is
+                    pass
                 else:
-                    # Assume it's already an S3 key
-                    s3_key = clean_url
-                
-                # Remove any remaining query string from S3 key
-                if '?' in s3_key:
-                    s3_key = s3_key.split('?')[0]
-                
-                presigned = await generate_presigned_url(s3_key)
-                if presigned:
-                    image_url = presigned
+                    # Remove query string and fragment from URL before processing
+                    # This prevents duplicate query strings when URL is already presigned
+                    parsed = urlparse(image_url)
+                    
+                    # Decode URL-encoded path to handle cases where query string is encoded in path
+                    decoded_path = unquote(parsed.path)
+                    
+                    # Remove query string from decoded path if it exists
+                    if '?' in decoded_path:
+                        decoded_path = decoded_path.split('?')[0]
+                    
+                    # Reconstruct URL without query string and fragment
+                    clean_url = urlunparse((parsed.scheme, parsed.netloc, decoded_path, '', '', ''))
+                    
+                    # Extract S3 key from URL
+                    # Stored format can be:
+                    # 1. s3://bucket/path (e.g., s3://output/news-images/iribnews/2025/12/30/abc123.jpg)
+                    # 2. {endpoint}/{bucket}/{key} (e.g., https://gpmedia.iribnews.ir/output/news-images/...)
+                    # 3. Just the key (e.g., news-images/iribnews/2025/12/30/abc123.jpg)
+                    # 4. Relative path (e.g., news-images/reuters_video/2026/01/06/2a4f0323.jpg)
+                    if clean_url.startswith("s3://"):
+                        # Parse s3://bucket/path format
+                        # Remove "s3://" prefix
+                        path_after_s3 = clean_url[5:]  # Remove "s3://"
+                        # Split bucket and key
+                        parts = path_after_s3.split("/", 1)
+                        if len(parts) == 2:
+                            path_bucket, s3_key = parts
+                            # Use the path after bucket as key (regardless of bucket name)
+                            s3_key = s3_key
+                        else:
+                            # No path after bucket, this shouldn't happen but use as-is
+                            s3_key = path_after_s3
+                        logger.debug(f"Extracted S3 key from s3:// URL: {s3_key}")
+                    elif clean_url.startswith(settings.s3_endpoint):
+                        # Remove endpoint and bucket to get the key
+                        prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}/"
+                        if clean_url.startswith(prefix):
+                            s3_key = clean_url[len(prefix):]
+                        else:
+                            # Try without trailing slash
+                            prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}"
+                            if clean_url.startswith(prefix):
+                                s3_key = clean_url[len(prefix):].lstrip("/")
+                            else:
+                                # Path might have bucket name duplicated, try to extract key
+                                # Example: https://gpmedia.nrms.ir/news-images/news-images/mashreghnews/...
+                                path_parts = decoded_path.lstrip("/").split("/")
+                                if len(path_parts) > 1 and path_parts[0] == path_parts[1]:
+                                    # Bucket name is duplicated, skip first occurrence
+                                    s3_key = "/".join(path_parts[1:])
+                                else:
+                                    s3_key = decoded_path.lstrip("/")
+                    elif not parsed.scheme and not parsed.netloc:
+                        # Relative path (no scheme, no netloc) - assume it's an S3 key
+                        # Examples: news-images/reuters_video/2026/01/06/2a4f0323.jpg
+                        #           news-videos/reuters_video/2026/01/06/a74f8683.mp4
+                        s3_key = decoded_path.lstrip("/")
+                        logger.debug(f"Detected relative path as S3 key: {s3_key}")
+                    else:
+                        # Assume it's already an S3 key
+                        s3_key = clean_url
+                    
+                    # Remove any remaining query string from S3 key
+                    if '?' in s3_key:
+                        s3_key = s3_key.split('?')[0]
+                    
+                    presigned = await generate_presigned_url(s3_key)
+                    if presigned:
+                        image_url = presigned
             except Exception as e:
                 # If presigned URL generation fails, use original URL
                 logger.warning(f"Failed to generate presigned URL for {image_url}: {e}", exc_info=True)
@@ -438,7 +495,7 @@ async def news_grid(
         
         # Determine text direction and styling based on language and breaking news
         # For Reuters sources, check language; for others, use default RTL
-        if article.source in ["reuters_photos", "reuters_text"]:
+        if article.source in ["reuters_photos", "reuters_text", "reuters_video"]:
             # Use language field if available, otherwise check raw_category
             language = getattr(article, 'language', None)
             if language and language.startswith('ar'):
@@ -742,59 +799,83 @@ async def news_detail(
     image_url = article.image_url
     if image_url:
         try:
-            # Remove query string and fragment from URL before processing
-            # This prevents duplicate query strings when URL is already presigned
-            parsed = urlparse(image_url)
-            
-            # Decode URL-encoded path to handle cases where query string is encoded in path
-            from urllib.parse import unquote
-            decoded_path = unquote(parsed.path)
-            
-            # Remove query string from decoded path if it exists
-            if '?' in decoded_path:
-                decoded_path = decoded_path.split('?')[0]
-            
-            # Reconstruct URL without query string and fragment
-            clean_url = urlunparse((parsed.scheme, parsed.netloc, decoded_path, '', '', ''))
-            
-            # Extract S3 key from URL
-            # Stored format: {endpoint}/{bucket}/{key}
-            if clean_url.startswith(settings.s3_endpoint):
-                # Remove endpoint and bucket to get the key
-                prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}/"
-                if clean_url.startswith(prefix):
-                    s3_key = clean_url[len(prefix):]
-                else:
-                    # Try without trailing slash
-                    prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}"
-                    if clean_url.startswith(prefix):
-                        s3_key = clean_url[len(prefix):].lstrip("/")
-                    else:
-                        # Path might have bucket name duplicated, try to extract key
-                        # Example: https://gpmedia.nrms.ir/news-images/news-images/mashreghnews/...
-                        path_parts = decoded_path.lstrip("/").split("/")
-                        if len(path_parts) > 1 and path_parts[0] == path_parts[1]:
-                            # Bucket name is duplicated, skip first occurrence
-                            s3_key = "/".join(path_parts[1:])
-                        else:
-                            s3_key = decoded_path.lstrip("/")
+            # Check if it's already a presigned URL (has query parameters with signature)
+            if '?' in image_url and ('X-Amz-Signature' in image_url or 'signature' in image_url.lower()):
+                # Already presigned, use as-is
+                pass
             else:
-                # Assume it's already an S3 key
-                s3_key = clean_url
-            
-            # Remove any remaining query string from S3 key
-            if '?' in s3_key:
-                s3_key = s3_key.split('?')[0]
-            
-            presigned = await generate_presigned_url(s3_key)
-            if presigned:
-                image_url = presigned
+                # Remove query string and fragment from URL before processing
+                # This prevents duplicate query strings when URL is already presigned
+                parsed = urlparse(image_url)
+                
+                # Decode URL-encoded path to handle cases where query string is encoded in path
+                from urllib.parse import unquote
+                decoded_path = unquote(parsed.path)
+                
+                # Remove query string from decoded path if it exists
+                if '?' in decoded_path:
+                    decoded_path = decoded_path.split('?')[0]
+                
+                # Reconstruct URL without query string and fragment
+                clean_url = urlunparse((parsed.scheme, parsed.netloc, decoded_path, '', '', ''))
+                
+                # Extract S3 key from URL
+                # Stored format can be:
+                # 1. s3://bucket/path (e.g., s3://output/news-images/iribnews/2025/12/30/abc123.jpg)
+                # 2. {endpoint}/{bucket}/{key} (e.g., https://gpmedia.iribnews.ir/output/news-images/...)
+                # 3. Just the key (e.g., news-images/iribnews/2025/12/30/abc123.jpg)
+                # 4. Relative path (e.g., news-images/reuters_video/2026/01/06/2a4f0323.jpg)
+                if clean_url.startswith("s3://"):
+                    # Parse s3://bucket/path format
+                    path_after_s3 = clean_url[5:]  # Remove "s3://"
+                    parts = path_after_s3.split("/", 1)
+                    if len(parts) == 2:
+                        s3_key = parts[1]
+                    else:
+                        s3_key = path_after_s3
+                    logger.debug(f"Extracted S3 key from s3:// URL: {s3_key}")
+                elif clean_url.startswith(settings.s3_endpoint):
+                    # Remove endpoint and bucket to get the key
+                    prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}/"
+                    if clean_url.startswith(prefix):
+                        s3_key = clean_url[len(prefix):]
+                    else:
+                        # Try without trailing slash
+                        prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}"
+                        if clean_url.startswith(prefix):
+                            s3_key = clean_url[len(prefix):].lstrip("/")
+                        else:
+                            # Path might have bucket name duplicated, try to extract key
+                            # Example: https://gpmedia.nrms.ir/news-images/news-images/mashreghnews/...
+                            path_parts = decoded_path.lstrip("/").split("/")
+                            if len(path_parts) > 1 and path_parts[0] == path_parts[1]:
+                                # Bucket name is duplicated, skip first occurrence
+                                s3_key = "/".join(path_parts[1:])
+                            else:
+                                s3_key = decoded_path.lstrip("/")
+                elif not parsed.scheme and not parsed.netloc:
+                    # Relative path (no scheme, no netloc) - assume it's an S3 key
+                    # Examples: news-images/reuters_video/2026/01/06/2a4f0323.jpg
+                    #           news-videos/reuters_video/2026/01/06/a74f8683.mp4
+                    s3_key = decoded_path.lstrip("/")
+                    logger.debug(f"Detected relative path as S3 key: {s3_key}")
+                else:
+                    # Assume it's already an S3 key
+                    s3_key = clean_url
+                
+                # Remove any remaining query string from S3 key
+                if '?' in s3_key:
+                    s3_key = s3_key.split('?')[0]
+                
+                presigned = await generate_presigned_url(s3_key)
+                if presigned:
+                    image_url = presigned
         except Exception as e:
             # If presigned URL generation fails, use original URL
             logger.warning(f"Failed to generate presigned URL for {image_url}: {e}", exc_info=True)
 
     # Determine text direction and styling based on language and breaking news
-    if article.source in ["reuters_photos", "reuters_text"]:
+    if article.source in ["reuters_photos", "reuters_text", "reuters_video"]:
         language = getattr(article, 'language', None)
         if language and language.startswith('ar'):
             is_ltr = False  # Arabic is RTL

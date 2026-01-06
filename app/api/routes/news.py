@@ -1,12 +1,14 @@
 """News endpoints."""
 
 import re
+import json
 import logging
 from typing import List, Optional
 from uuid import UUID
 from urllib.parse import urlparse, urlunparse, unquote
 
 from fastapi import APIRouter, Query, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select, desc, func, or_, and_, or_, cast, text, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -17,6 +19,7 @@ from app.core.config import settings
 from app.core.date_utils import format_persian_date
 from app.db.models import News
 from app.storage.s3 import generate_presigned_url
+from app.services.video_download_service import get_download_service
 
 logger = logging.getLogger(__name__)
 
@@ -24,23 +27,17 @@ router = APIRouter(prefix="/news", tags=["news"])
 
 
 async def process_body_html_images(body_html: str) -> str:
-    """Process body_html to convert S3 keys in img src to presigned URLs."""
+    """Process body_html to convert S3 keys in img src and video source to presigned URLs."""
     if not body_html:
         return body_html
     
-    # Find all img tags with src attribute
-    img_pattern = re.compile(r'<img\s+([^>]*?)src=["\']([^"\']+)["\']([^>]*?)>', re.IGNORECASE)
-    
-    async def replace_img(match):
-        before_src = match.group(1)
-        src_url = match.group(2)
-        after_src = match.group(3)
-        
+    async def process_s3_url(src_url: str) -> Optional[str]:
+        """Process a URL and convert S3 key to presigned URL if needed."""
         # Skip if already a full URL (http/https) or data URL
         if src_url.startswith(('http://', 'https://', 'data:', '//')):
             # Check if it's a Reuters token URL that needs to be kept as-is
             if 'token=' in src_url:
-                return match.group(0)  # Keep original
+                return None  # Keep original
             # If it's an http URL without token, it might be an S3 endpoint URL
             # Try to extract key and convert to presigned
             if src_url.startswith(settings.s3_endpoint):
@@ -53,7 +50,7 @@ async def process_body_html_images(body_html: str) -> str:
                         if src_url.startswith(prefix):
                             s3_key = src_url[len(prefix):].lstrip("/")
                         else:
-                            return match.group(0)  # Can't extract key
+                            return None  # Can't extract key
                     
                     # Remove query string from S3 key
                     if '?' in s3_key:
@@ -61,11 +58,11 @@ async def process_body_html_images(body_html: str) -> str:
                     
                     presigned = await generate_presigned_url(s3_key)
                     if presigned:
-                        return f'<img {before_src}src="{presigned}"{after_src}>'
+                        return presigned
                 except Exception as e:
                     logger.debug(f"Failed to process S3 endpoint URL in body_html: {e}")
             
-            return match.group(0)  # Keep original
+            return None  # Keep original
         
         # Process S3 key or s3:// URL
         try:
@@ -86,16 +83,65 @@ async def process_body_html_images(body_html: str) -> str:
             
             presigned = await generate_presigned_url(s3_key)
             if presigned:
-                return f'<img {before_src}src="{presigned}"{after_src}>'
+                return presigned
         except Exception as e:
             logger.debug(f"Failed to process S3 key in body_html: {e}")
         
+        return None  # Keep original if processing fails
+    
+    # Find all img tags with src attribute
+    img_pattern = re.compile(r'<img\s+([^>]*?)src=["\']([^"\']+)["\']([^>]*?)>', re.IGNORECASE)
+    
+    async def replace_img(match):
+        before_src = match.group(1)
+        src_url = match.group(2)
+        after_src = match.group(3)
+        
+        presigned = await process_s3_url(src_url)
+        if presigned:
+            return f'<img {before_src}src="{presigned}"{after_src}>'
+        return match.group(0)  # Keep original if processing fails
+    
+    # Find all video source tags with src attribute
+    video_source_pattern = re.compile(r'<source\s+([^>]*?)src=["\']([^"\']+)["\']([^>]*?)>', re.IGNORECASE)
+    
+    async def replace_video_source(match):
+        before_src = match.group(1)
+        src_url = match.group(2)
+        after_src = match.group(3)
+        
+        presigned = await process_s3_url(src_url)
+        if presigned:
+            return f'<source {before_src}src="{presigned}"{after_src}>'
+        return match.group(0)  # Keep original if processing fails
+    
+    # Find all video tags with poster attribute
+    video_poster_pattern = re.compile(r'<video\s+([^>]*?)poster=["\']([^"\']+)["\']([^>]*?)>', re.IGNORECASE)
+    
+    async def replace_video_poster(match):
+        before_poster = match.group(1)
+        poster_url = match.group(2)
+        after_poster = match.group(3)
+        
+        presigned = await process_s3_url(poster_url)
+        if presigned:
+            return f'<video {before_poster}poster="{presigned}"{after_poster}>'
         return match.group(0)  # Keep original if processing fails
     
     # Process all img tags
     processed_html = body_html
-    for match in img_pattern.finditer(body_html):
+    for match in img_pattern.finditer(processed_html):
         replacement = await replace_img(match)
+        processed_html = processed_html.replace(match.group(0), replacement, 1)
+    
+    # Process all video source tags
+    for match in video_source_pattern.finditer(processed_html):
+        replacement = await replace_video_source(match)
+        processed_html = processed_html.replace(match.group(0), replacement, 1)
+    
+    # Process all video poster attributes
+    for match in video_poster_pattern.finditer(processed_html):
+        replacement = await replace_video_poster(match)
         processed_html = processed_html.replace(match.group(0), replacement, 1)
     
     return processed_html
@@ -123,6 +169,7 @@ SOURCE_NAMES = {
     "eghtesadonline": "اقتصادآنلاین",
     "reuters_photos": "عکس‌های رویترز",
     "reuters_text": "اخبار رویترز",
+    "reuters_video": "ویدئوهای رویترز",
 }
 
 # Color codes for sources (used in API responses)
@@ -148,6 +195,7 @@ SOURCE_COLORS = {
     "eghtesadonline": "#27ae60", # سبز
     "reuters_photos": "#c0392b", # قرمز تیره
     "reuters_text": "#c0392b", # قرمز تیره (مشابه photos)
+    "reuters_video": "#c0392b", # قرمز تیره (مشابه photos و text)
 }
 
 
@@ -293,69 +341,76 @@ async def get_latest_news(
         image_url = article.image_url
         if image_url:
             try:
-                # Remove query string and fragment from URL before processing
-                # This prevents duplicate query strings when URL is already presigned
-                parsed = urlparse(image_url)
-                
-                # Decode URL-encoded path to handle cases where query string is encoded in path
-                decoded_path = unquote(parsed.path)
-                
-                # Remove query string from decoded path if it exists
-                if '?' in decoded_path:
-                    decoded_path = decoded_path.split('?')[0]
-                
-                # Reconstruct URL without query string and fragment
-                clean_url = urlunparse((parsed.scheme, parsed.netloc, decoded_path, '', '', ''))
-                
-                # Extract S3 key from URL
-                # Stored format can be:
-                # 1. s3://bucket/path (e.g., s3://output/news-images/iribnews/2025/12/30/abc123.jpg)
-                # 2. {endpoint}/{bucket}/{key} (e.g., https://gpmedia.iribnews.ir/output/news-images/...)
-                # 3. Just the key (e.g., news-images/iribnews/2025/12/30/abc123.jpg)
-                if clean_url.startswith("s3://"):
-                    # Parse s3://bucket/path format
-                    # Remove "s3://" prefix
-                    path_after_s3 = clean_url[5:]  # Remove "s3://"
-                    # Split bucket and key
-                    parts = path_after_s3.split("/", 1)
-                    if len(parts) == 2:
-                        path_bucket, s3_key = parts
-                        # Use the path after bucket as key (regardless of bucket name)
-                        s3_key = s3_key
-                    else:
-                        # No path after bucket, this shouldn't happen but use as-is
-                        s3_key = path_after_s3
-                    logger.debug(f"Extracted S3 key from s3:// URL: {s3_key}")
-                elif clean_url.startswith(settings.s3_endpoint):
-                    # Remove endpoint and bucket to get the key
-                    prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}/"
-                    if clean_url.startswith(prefix):
-                        s3_key = clean_url[len(prefix):]
-                    else:
-                        # Try without trailing slash
-                        prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}"
-                        if clean_url.startswith(prefix):
-                            s3_key = clean_url[len(prefix):].lstrip("/")
-                        else:
-                            # Path might have bucket name duplicated, try to extract key
-                            # Example: https://gpmedia.nrms.ir/news-images/news-images/mashreghnews/...
-                            path_parts = decoded_path.lstrip("/").split("/")
-                            if len(path_parts) > 1 and path_parts[0] == path_parts[1]:
-                                # Bucket name is duplicated, skip first occurrence
-                                s3_key = "/".join(path_parts[1:])
-                            else:
-                                s3_key = decoded_path.lstrip("/")
+                # Check if it's already a presigned URL (has query parameters with signature)
+                if '?' in image_url and ('X-Amz-Signature' in image_url or 'signature' in image_url.lower()):
+                    # Already presigned, use as-is
+                    pass
                 else:
-                    # Assume it's already an S3 key
-                    s3_key = clean_url
-                
-                # Remove any remaining query string from S3 key
-                if '?' in s3_key:
-                    s3_key = s3_key.split('?')[0]
-                
-                presigned = await generate_presigned_url(s3_key)
-                if presigned:
-                    image_url = presigned
+                    # Remove query string and fragment from URL before processing
+                    # This prevents duplicate query strings when URL is already presigned
+                    parsed = urlparse(image_url)
+                    
+                    # Decode URL-encoded path to handle cases where query string is encoded in path
+                    decoded_path = unquote(parsed.path)
+                    
+                    # Remove query string from decoded path if it exists
+                    if '?' in decoded_path:
+                        decoded_path = decoded_path.split('?')[0]
+                    
+                    # Reconstruct URL without query string and fragment
+                    clean_url = urlunparse((parsed.scheme, parsed.netloc, decoded_path, '', '', ''))
+                    
+                    # Extract S3 key from URL
+                    # Stored format can be:
+                    # 1. s3://bucket/path (e.g., s3://output/news-images/iribnews/2025/12/30/abc123.jpg)
+                    # 2. {endpoint}/{bucket}/{key} (e.g., https://gpmedia.iribnews.ir/output/news-images/...)
+                    # 3. Just the key (e.g., news-images/iribnews/2025/12/30/abc123.jpg)
+                    # 4. Relative path (e.g., news-images/reuters_video/2026/01/06/2a4f0323.jpg)
+                    if clean_url.startswith("s3://"):
+                        # Parse s3://bucket/path format
+                        path_after_s3 = clean_url[5:]  # Remove "s3://"
+                        parts = path_after_s3.split("/", 1)
+                        if len(parts) == 2:
+                            s3_key = parts[1]
+                        else:
+                            s3_key = path_after_s3
+                        logger.debug(f"Extracted S3 key from s3:// URL: {s3_key}")
+                    elif clean_url.startswith(settings.s3_endpoint):
+                        # Remove endpoint and bucket to get the key
+                        prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}/"
+                        if clean_url.startswith(prefix):
+                            s3_key = clean_url[len(prefix):]
+                        else:
+                            # Try without trailing slash
+                            prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}"
+                            if clean_url.startswith(prefix):
+                                s3_key = clean_url[len(prefix):].lstrip("/")
+                            else:
+                                # Path might have bucket name duplicated, try to extract key
+                                # Example: https://gpmedia.nrms.ir/news-images/news-images/mashreghnews/...
+                                path_parts = decoded_path.lstrip("/").split("/")
+                                if len(path_parts) > 1 and path_parts[0] == path_parts[1]:
+                                    # Bucket name is duplicated, skip first occurrence
+                                    s3_key = "/".join(path_parts[1:])
+                                else:
+                                    s3_key = decoded_path.lstrip("/")
+                    elif not parsed.scheme and not parsed.netloc:
+                        # Relative path (no scheme, no netloc) - assume it's an S3 key
+                        # Examples: news-images/reuters_video/2026/01/06/2a4f0323.jpg
+                        #           news-videos/reuters_video/2026/01/06/a74f8683.mp4
+                        s3_key = decoded_path.lstrip("/")
+                        logger.debug(f"Detected relative path as S3 key: {s3_key}")
+                    else:
+                        # Assume it's already an S3 key
+                        s3_key = clean_url
+                    
+                    # Remove any remaining query string from S3 key
+                    if '?' in s3_key:
+                        s3_key = s3_key.split('?')[0]
+                    
+                    presigned = await generate_presigned_url(s3_key)
+                    if presigned:
+                        image_url = presigned
             except Exception as e:
                 # If presigned URL generation fails, use original URL
                 logger.warning(f"Failed to generate presigned URL for {image_url}: {e}", exc_info=True)
@@ -370,7 +425,7 @@ async def get_latest_news(
         source_color = map_source_color(article.source)
         
         # Determine text direction for title (LTR for Reuters, RTL for Persian sources)
-        is_ltr = article.source in ["reuters_photos", "reuters_text"]
+        is_ltr = article.source in ["reuters_photos", "reuters_text", "reuters_video"]
         
         items.append({
             "id": str(article.id),
@@ -402,6 +457,173 @@ async def get_latest_news(
             total=total,
             has_more=has_more,
         ),
+    )
+
+
+@router.post("/{news_id}/download-hq-video/start")
+async def start_download_hq_video(
+    news_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Start downloading high-quality video (rend:stream:8256m:16x9:mp4) for a Reuters video article.
+    Returns task ID for status checking.
+    """
+    try:
+        # Validate UUID format
+        UUID(news_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid news ID format")
+    
+    # Get article
+    if "postgresql" in settings.database_url.lower():
+        result = await db.execute(
+            select(News).where(cast(News.id, String) == news_id)
+        )
+    else:
+        result = await db.execute(select(News).where(News.id == news_id))
+    article = result.scalar_one_or_none()
+    
+    if not article:
+        raise HTTPException(status_code=404, detail="News article not found")
+    
+    # Check if it's a Reuters video article
+    if article.source != "reuters_video":
+        raise HTTPException(status_code=400, detail="This endpoint is only for Reuters video articles")
+    
+    # Extract GUID from article URL
+    # URL format: reuters_video:tag:reuters.com,2026:newsml_RW444706012026RP1:2
+    item_id = None
+    if article.url and article.url.startswith('reuters_video:'):
+        # Extract GUID from URL (everything after 'reuters_video:')
+        item_id = article.url[len('reuters_video:'):]
+    
+    if not item_id:
+        raise HTTPException(status_code=400, detail="Could not extract item ID from article")
+    
+    # Start download task
+    download_service = get_download_service()
+    task_id = await download_service.start_download(news_id, item_id)
+    
+    return {
+        "task_id": task_id,
+        "status": "pending",
+        "message": "دانلود شروع شد"
+    }
+
+
+@router.get("/download-hq-video/status/{task_id}")
+async def get_download_status(
+    task_id: str,
+):
+    """
+    Get download task status.
+    
+    Args:
+        task_id: Task ID returned from start_download_hq_video
+        
+    Returns:
+        Task status
+    """
+    download_service = get_download_service()
+    task_status = await download_service.get_task_status(task_id)
+    
+    if not task_status:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return task_status
+
+
+@router.get("/{news_id}/download-hq-video")
+async def download_hq_video_stream(
+    news_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Download high-quality video with Server-Sent Events stream.
+    This endpoint starts the download and streams progress updates.
+    """
+    try:
+        # Validate UUID format
+        UUID(news_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid news ID format")
+    
+    # Get article
+    if "postgresql" in settings.database_url.lower():
+        result = await db.execute(
+            select(News).where(cast(News.id, String) == news_id)
+        )
+    else:
+        result = await db.execute(select(News).where(News.id == news_id))
+    article = result.scalar_one_or_none()
+    
+    if not article:
+        raise HTTPException(status_code=404, detail="News article not found")
+    
+    # Check if it's a Reuters video article
+    if article.source != "reuters_video":
+        raise HTTPException(status_code=400, detail="This endpoint is only for Reuters video articles")
+    
+    # Extract GUID from article URL
+    item_id = None
+    if article.url and article.url.startswith('reuters_video:'):
+        item_id = article.url[len('reuters_video:'):]
+    
+    if not item_id:
+        raise HTTPException(status_code=400, detail="Could not extract item ID from article")
+    
+    # Start download task
+    download_service = get_download_service()
+    task_id = await download_service.start_download(news_id, item_id)
+    
+    async def generate_progress():
+        """Generate Server-Sent Events for progress updates."""
+        import asyncio
+        
+        try:
+            while True:
+                task_status = await download_service.get_task_status(task_id)
+                
+                if not task_status:
+                    yield f"data: {json.dumps({'status': 'error', 'message': 'Task not found', 'progress': 0})}\n\n"
+                    break
+                
+                # Convert status to match expected format
+                response_data = {
+                    'status': task_status['status'],
+                    'progress': task_status['progress'],
+                    'message': task_status['message'],
+                }
+                
+                if task_status.get('presigned_url'):
+                    response_data['presigned_url'] = task_status['presigned_url']
+                
+                if task_status.get('error'):
+                    response_data['error'] = task_status['error']
+                
+                # Send status update
+                yield f"data: {json.dumps(response_data)}\n\n"
+                
+                # Break if completed or error
+                if task_status['status'] in ['completed', 'error']:
+                    break
+                
+                # Wait before next check
+                await asyncio.sleep(0.5)
+                
+        except Exception as e:
+            logger.error(f"Error in progress stream: {e}", exc_info=True)
+            yield f"data: {json.dumps({'status': 'error', 'message': str(e), 'progress': 0})}\n\n"
+    
+    return StreamingResponse(
+        generate_progress(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
     )
 
 
@@ -448,68 +670,75 @@ async def get_news_by_id(
     image_url = article.image_url
     if image_url:
         try:
-            # Remove query string and fragment from URL before processing
-            # This prevents duplicate query strings when URL is already presigned
-            parsed = urlparse(image_url)
-            
-            # Decode URL-encoded path to handle cases where query string is encoded in path
-            decoded_path = unquote(parsed.path)
-            
-            # Remove query string from decoded path if it exists
-            if '?' in decoded_path:
-                decoded_path = decoded_path.split('?')[0]
-            
-            # Reconstruct URL without query string and fragment
-            clean_url = urlunparse((parsed.scheme, parsed.netloc, decoded_path, '', '', ''))
-            
-            # Extract S3 key from URL
-            # Stored format can be:
-            # 1. s3://bucket/path (e.g., s3://output/news-images/iribnews/2025/12/30/abc123.jpg)
-            # 2. {endpoint}/{bucket}/{key} (e.g., https://gpmedia.iribnews.ir/output/news-images/...)
-            # 3. Just the key (e.g., news-images/iribnews/2025/12/30/abc123.jpg)
-            if clean_url.startswith("s3://"):
-                # Parse s3://bucket/path format
-                # Remove "s3://" prefix
-                path_after_s3 = clean_url[5:]  # Remove "s3://"
-                # Split bucket and key
-                parts = path_after_s3.split("/", 1)
-                if len(parts) == 2:
-                    path_bucket, s3_key = parts
-                    # Use the path after bucket as key (regardless of bucket name)
-                    s3_key = s3_key
-                else:
-                    # No path after bucket, this shouldn't happen but use as-is
-                    s3_key = path_after_s3
-                logger.debug(f"Extracted S3 key from s3:// URL: {s3_key}")
-            elif clean_url.startswith(settings.s3_endpoint):
-                prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}/"
-                if clean_url.startswith(prefix):
-                    s3_key = clean_url[len(prefix):]
-                else:
-                    # Try without trailing slash
-                    prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}"
-                    if clean_url.startswith(prefix):
-                        s3_key = clean_url[len(prefix):].lstrip("/")
-                    else:
-                        # Path might have bucket name duplicated, try to extract key
-                        # Example: https://gpmedia.nrms.ir/news-images/news-images/mashreghnews/...
-                        path_parts = decoded_path.lstrip("/").split("/")
-                        if len(path_parts) > 1 and path_parts[0] == path_parts[1]:
-                            # Bucket name is duplicated, skip first occurrence
-                            s3_key = "/".join(path_parts[1:])
-                        else:
-                            s3_key = decoded_path.lstrip("/")
+            # Check if it's already a presigned URL (has query parameters with signature)
+            if '?' in image_url and ('X-Amz-Signature' in image_url or 'signature' in image_url.lower()):
+                # Already presigned, use as-is
+                pass
             else:
-                # Assume it's already an S3 key
-                s3_key = clean_url
-            
-            # Remove any remaining query string from S3 key
-            if '?' in s3_key:
-                s3_key = s3_key.split('?')[0]
-            
-            presigned = await generate_presigned_url(s3_key)
-            if presigned:
-                image_url = presigned
+                # Remove query string and fragment from URL before processing
+                # This prevents duplicate query strings when URL is already presigned
+                parsed = urlparse(image_url)
+                
+                # Decode URL-encoded path to handle cases where query string is encoded in path
+                decoded_path = unquote(parsed.path)
+                
+                # Remove query string from decoded path if it exists
+                if '?' in decoded_path:
+                    decoded_path = decoded_path.split('?')[0]
+                
+                # Reconstruct URL without query string and fragment
+                clean_url = urlunparse((parsed.scheme, parsed.netloc, decoded_path, '', '', ''))
+                
+                # Extract S3 key from URL
+                # Stored format can be:
+                # 1. s3://bucket/path (e.g., s3://output/news-images/iribnews/2025/12/30/abc123.jpg)
+                # 2. {endpoint}/{bucket}/{key} (e.g., https://gpmedia.iribnews.ir/output/news-images/...)
+                # 3. Just the key (e.g., news-images/iribnews/2025/12/30/abc123.jpg)
+                # 4. Relative path (e.g., news-images/reuters_video/2026/01/06/2a4f0323.jpg)
+                if clean_url.startswith("s3://"):
+                    # Parse s3://bucket/path format
+                    path_after_s3 = clean_url[5:]  # Remove "s3://"
+                    parts = path_after_s3.split("/", 1)
+                    if len(parts) == 2:
+                        s3_key = parts[1]
+                    else:
+                        s3_key = path_after_s3
+                    logger.debug(f"Extracted S3 key from s3:// URL: {s3_key}")
+                elif clean_url.startswith(settings.s3_endpoint):
+                    prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}/"
+                    if clean_url.startswith(prefix):
+                        s3_key = clean_url[len(prefix):]
+                    else:
+                        # Try without trailing slash
+                        prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}"
+                        if clean_url.startswith(prefix):
+                            s3_key = clean_url[len(prefix):].lstrip("/")
+                        else:
+                            # Path might have bucket name duplicated, try to extract key
+                            # Example: https://gpmedia.nrms.ir/news-images/news-images/mashreghnews/...
+                            path_parts = decoded_path.lstrip("/").split("/")
+                            if len(path_parts) > 1 and path_parts[0] == path_parts[1]:
+                                # Bucket name is duplicated, skip first occurrence
+                                s3_key = "/".join(path_parts[1:])
+                            else:
+                                s3_key = decoded_path.lstrip("/")
+                elif not parsed.scheme and not parsed.netloc:
+                    # Relative path (no scheme, no netloc) - assume it's an S3 key
+                    # Examples: news-images/reuters_video/2026/01/06/2a4f0323.jpg
+                    #           news-videos/reuters_video/2026/01/06/a74f8683.mp4
+                    s3_key = decoded_path.lstrip("/")
+                    logger.debug(f"Detected relative path as S3 key: {s3_key}")
+                else:
+                    # Assume it's already an S3 key
+                    s3_key = clean_url
+                
+                # Remove any remaining query string from S3 key
+                if '?' in s3_key:
+                    s3_key = s3_key.split('?')[0]
+                
+                presigned = await generate_presigned_url(s3_key)
+                if presigned:
+                    image_url = presigned
         except Exception as e:
             # If presigned URL generation fails, use original URL
             logger.warning(f"Failed to generate presigned URL for {image_url}: {e}", exc_info=True)
@@ -606,7 +835,7 @@ async def get_news_by_id(
         body_html = await process_body_html_images(body_html)
     
     # Determine text direction for title (LTR for Reuters, RTL for Persian sources)
-    is_ltr = article.source in ["reuters_photos", "reuters_text"]
+    is_ltr = article.source in ["reuters_photos", "reuters_text", "reuters_video"]
     
     return {
         "id": str(article.id),

@@ -72,6 +72,7 @@ class NewsSource(Base):
 
     name = Column(String(100), primary_key=True, nullable=False)
     interval_minutes = Column(Integer, default=300, nullable=False)
+    source_type = Column(String(50), nullable=False, default='internal')
     last_run_at = Column(DateTime(timezone=True), nullable=True)
     enabled = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -99,6 +100,8 @@ class News(Base):
     language = Column(String(10), nullable=True)  # Language code (e.g., 'en', 'ar', 'fr')
     is_breaking = Column(Boolean, default=False, nullable=False)  # Breaking news flag
     priority = Column(Integer, nullable=True)  # Reuters priority level (1-5)
+    is_international = Column(Boolean, default=False, nullable=False)  # International news flag (True for foreign sources like Reuters)
+    source_type = Column(String(50), nullable=False, default='internal', index=True)  # 'internal' or 'external'
 
     __table_args__ = (
         UniqueConstraint("url", name="uq_news_url"),

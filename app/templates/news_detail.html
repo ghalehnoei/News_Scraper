@@ -33,7 +33,25 @@
     
     {% if article.body_html %}
     <div class="news-body" dir="{{ 'rtl' if article.language in ['ar', 'fa'] else 'ltr' }}"{% if article.language in ['ar', 'fa'] %} style="font-family: 'Vazir', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;"{% endif %}>
+        {% if article.source == 'reuters_video' %}
+        <div id="reutersVideoContainer">
+            {{ article.body_html|safe }}
+            <div class="hq-video-download-container" style="margin-top: 10px; text-align: right; direction: rtl;">
+                <button id="downloadHqVideoBtn" class="download-hq-video-btn" onclick="downloadHqVideo('{{ article.id }}')" style="padding: 10px 20px; background-color: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-family: 'Vazir', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                    دانلود ویدیوی اصلی
+                </button>
+                <div id="downloadProgress" style="display: none; margin-top: 10px;">
+                    <div style="background-color: #ecf0f1; border-radius: 5px; height: 20px; position: relative; overflow: hidden;">
+                        <div id="progressBar" style="background-color: #3498db; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                    </div>
+                    <p id="progressText" style="margin-top: 5px; font-size: 12px; color: #7f8c8d;"></p>
+                </div>
+                <div id="downloadResult" style="display: none; margin-top: 10px;"></div>
+            </div>
+        </div>
+        {% else %}
         {{ article.body_html|safe }}
+        {% endif %}
     </div>
     {% endif %}
     
@@ -43,5 +61,178 @@
         </a>
     </div>
 </div>
+
+<script>
+// Stop all videos when page is unloaded or navigated away
+function stopAllVideos() {
+    const videos = document.querySelectorAll('video');
+    videos.forEach(video => {
+        video.pause();
+        video.currentTime = 0;
+    });
+}
+
+// Stop videos when page is about to unload
+window.addEventListener('beforeunload', stopAllVideos);
+
+// Stop videos when page visibility changes (tab switch, minimize, etc.)
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+        stopAllVideos();
+    }
+});
+
+// Stop videos when navigating back (using popstate)
+window.addEventListener('popstate', stopAllVideos);
+
+// Stop videos when clicking on back link
+document.addEventListener('DOMContentLoaded', function() {
+    const backLink = document.querySelector('.back-link');
+    if (backLink) {
+        backLink.addEventListener('click', function(e) {
+            stopAllVideos();
+            // Allow navigation to proceed
+        });
+    }
+    
+    // Move download button after video player for reuters_video
+    const videoContainer = document.getElementById('reutersVideoContainer');
+    if (videoContainer) {
+        const videoPlayer = videoContainer.querySelector('.reuters-video-player');
+        const downloadContainer = videoContainer.querySelector('.hq-video-download-container');
+        if (videoPlayer && downloadContainer) {
+            // Insert download button right after video player
+            videoPlayer.insertAdjacentElement('afterend', downloadContainer);
+        }
+    }
+});
+
+// Download HQ video function
+window.downloadHqVideo = async function downloadHqVideo(newsId) {
+    console.log('downloadHqVideo called with newsId:', newsId);
+    
+    const btn = document.getElementById('downloadHqVideoBtn');
+    const progressDiv = document.getElementById('downloadProgress');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const resultDiv = document.getElementById('downloadResult');
+    
+    if (!btn || !progressDiv || !progressBar || !progressText || !resultDiv) {
+        console.error('Download elements not found:', {
+            btn: !!btn,
+            progressDiv: !!progressDiv,
+            progressBar: !!progressBar,
+            progressText: !!progressText,
+            resultDiv: !!resultDiv
+        });
+        alert('خطا: عناصر دانلود یافت نشد');
+        return;
+    }
+    
+    console.log('Starting download...');
+    
+    // Disable button
+    btn.disabled = true;
+    btn.textContent = 'در حال دانلود...';
+    
+    // Show progress
+    progressDiv.style.display = 'block';
+    progressBar.style.width = '0%';
+    progressText.textContent = 'شروع دانلود...';
+    resultDiv.style.display = 'none';
+    
+    try {
+        // Start download task
+        console.log('Starting download task...');
+        const startResponse = await fetch(`/news/${newsId}/download-hq-video/start`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        if (!startResponse.ok) {
+            throw new Error('Failed to start download');
+        }
+        
+        const startData = await startResponse.json();
+        const taskId = startData.task_id;
+        console.log('Download task started, task_id:', taskId);
+        
+        // Connect to status stream
+        const url = `/news/${newsId}/download-hq-video?task_id=${taskId}`;
+        console.log('Connecting to:', url);
+        
+        const eventSource = new EventSource(url);
+        
+        eventSource.onopen = function() {
+            console.log('EventSource connection opened');
+        };
+        
+        eventSource.onmessage = function(event) {
+            console.log('Received message:', event.data);
+            try {
+                const data = JSON.parse(event.data);
+                console.log('Parsed data:', data);
+                
+                if (data.status === 'error') {
+                    progressText.textContent = 'خطا: ' + (data.message || 'خطای ناشناخته');
+                    progressBar.style.backgroundColor = '#e74c3c';
+                    btn.disabled = false;
+                    btn.textContent = 'دانلود ویدیوی اصلی';
+                    eventSource.close();
+                    return;
+                }
+                
+                if (data.progress !== undefined) {
+                    progressBar.style.width = data.progress + '%';
+                }
+                
+                if (data.message) {
+                    progressText.textContent = data.message;
+                }
+                
+                if (data.status === 'completed' || data.status === 'success') {
+                    progressBar.style.width = '100%';
+                    progressText.textContent = 'دانلود با موفقیت انجام شد!';
+                    
+                    if (data.presigned_url) {
+                        resultDiv.innerHTML = `
+                            <a href="${data.presigned_url}" download style="display: inline-block; padding: 10px 20px; background-color: #27ae60; color: white; text-decoration: none; border-radius: 5px; font-family: 'Vazir', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                                دانلود فایل
+                            </a>
+                        `;
+                        resultDiv.style.display = 'block';
+                    }
+                    
+                    btn.disabled = false;
+                    btn.textContent = 'دانلود ویدیوی اصلی';
+                    eventSource.close();
+                }
+            } catch (parseError) {
+                console.error('Error parsing JSON:', parseError, 'Raw data:', event.data);
+                progressText.textContent = 'خطا در پردازش پاسخ سرور';
+                progressBar.style.backgroundColor = '#e74c3c';
+            }
+        };
+        
+        eventSource.onerror = function(error) {
+            console.error('EventSource error:', error);
+            progressText.textContent = 'خطا در اتصال به سرور';
+            progressBar.style.backgroundColor = '#e74c3c';
+            btn.disabled = false;
+            btn.textContent = 'دانلود ویدیوی اصلی';
+            eventSource.close();
+        };
+        
+    } catch (error) {
+        console.error('Error in downloadHqVideo:', error);
+        progressText.textContent = 'خطا: ' + error.message;
+        progressBar.style.backgroundColor = '#e74c3c';
+        btn.disabled = false;
+        btn.textContent = 'دانلود ویدیوی اصلی';
+    }
+}
+</script>
 {% endblock %}
 

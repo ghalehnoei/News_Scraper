@@ -396,6 +396,8 @@ class ReutersTextWorker(BaseWorker):
                     language=article_data.get("language", "en"),
                     is_breaking=article_data.get("is_breaking", False),
                     priority=article_data.get("priority", 5),
+                    is_international=True,  # Reuters is an international source
+                    source_type='external',
                 )
                 
                 db.add(news)

@@ -511,6 +511,8 @@ class ReutersPhotosWorker(BaseWorker):
                     image_url=article_data.get("image_url", ""),
                     category=normalized_category,
                     raw_category=raw_category,
+                    is_international=True,  # Reuters is an international source
+                    source_type='external',
                 )
                 
                 db.add(news)

@@ -6,11 +6,9 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from io import BytesIO
-import tempfile
 import logging
 
 import aiohttp
-import yt_dlp
 import os
 from sqlalchemy import select
 from dotenv import load_dotenv
@@ -132,6 +130,68 @@ class ReutersVideoWorker(BaseWorker):
         except Exception as e:
             self.logger.error(f"Error during authentication: {e}", exc_info=True)
             return False
+
+    async def _fetch_video_channels(self) -> Optional[str]:
+        """Fetch list of video channels from Reuters API."""
+        try:
+            await self.rate_limiter.acquire(
+                source=self.source_name,
+                request_type="api"
+            )
+            
+            session = await self._get_http_session()
+            channels_url = f"http://rmb.reuters.com/rmd/rest/xml/channels?channelCategory=BRV&token={self.auth_token}"
+            
+            self.logger.info(
+                f"Fetching video channels from: {channels_url}",
+                extra={"source": self.source_name}
+            )
+            
+            async with session.get(channels_url) as response:
+                if response.status != 200:
+                    self.logger.error(f"Failed to fetch channels, status: {response.status}")
+                    return None
+                
+                xml_content = await response.text()
+                return xml_content
+                
+        except Exception as e:
+            self.logger.error(f"Error fetching video channels: {e}", exc_info=True)
+            return None
+
+    def _parse_channels_list(self, xml_content: str) -> List[Dict[str, str]]:
+        """Parse channels XML and extract channel information."""
+        try:
+            root = ET.fromstring(xml_content)
+            channels = []
+            
+            # Find all channelInformation elements
+            for channel_elem in root.findall(".//channelInformation"):
+                channel_info = {}
+
+                # Extract channel alias (used as channel ID)
+                alias_elem = channel_elem.find("alias")
+                if alias_elem is not None and alias_elem.text:
+                    channel_info["alias"] = alias_elem.text.strip()
+                else:
+                    continue  # Skip if no alias
+
+                # Extract channel description
+                desc_elem = channel_elem.find("description")
+                if desc_elem is not None and desc_elem.text:
+                    channel_info["description"] = desc_elem.text.strip()
+                else:
+                    channel_info["description"] = ""
+
+                self.logger.debug(f"Found channel: {channel_info['alias']} - {channel_info['description']}")
+                channels.append(channel_info)
+            
+            self.logger.info(f"Found {len(channels)} video channels")
+            return channels
+            
+        except Exception as e:
+            self.logger.error(f"Error parsing channels list: {e}", exc_info=True)
+            return []
 
     async def _fetch_items_list(self, channel: str, limit: int = 20) -> Optional[str]:
         """Fetch list of items from a specific video channel."""
@@ -635,9 +695,7 @@ class ReutersVideoWorker(BaseWorker):
             return None
 
     async def _download_video(self, url: str) -> Optional[bytes]:
-        """Download video from URL using yt-dlp."""
-        temp_file = None
-        temp_path = None
+        """Download video directly from URL using aiohttp."""
         try:
             await self.rate_limiter.acquire(
                 source=self.source_name,
@@ -650,79 +708,49 @@ class ReutersVideoWorker(BaseWorker):
             else:
                 url_with_token = f"{url}?token={self.auth_token}"
             
-            # Create temporary file
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-            temp_path = temp_file.name
-            temp_file.close()
+            self.logger.info(f"Downloading video from {url[:80]}...")
+            self.logger.debug(f"Full video URL with token: {url_with_token[:200]}")
             
-            # Configure yt-dlp options
-            ydl_opts = {
-                'outtmpl': temp_path,
-                'quiet': True,
-                'no_warnings': True,
-                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'http_headers': {
+            # Download video directly using aiohttp
+            session = await self._get_http_session()
+            async with session.get(
+                url_with_token,
+                headers={
                     'Accept': 'video/mp4,video/*,*/*;q=0.8',
                     'Accept-Language': 'en-US,en;q=0.9',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 },
-                'nocheckcertificate': True,
-                'socket_timeout': 300,  # 5 minutes timeout for videos
-            }
-            
-            self.logger.info(f"Downloading video with yt-dlp from {url[:80]}...")
-            self.logger.info(f"Full video URL with token: {url_with_token[:200]}")
-            
-            # Download in thread pool to avoid blocking
-            def download_sync():
-                import urllib.request
-                req = urllib.request.Request(
-                    url_with_token,
-                    headers={
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        'Accept': 'video/mp4,video/*,*/*;q=0.8',
-                        'Accept-Language': 'en-US,en;q=0.9',
+                timeout=aiohttp.ClientTimeout(total=300)  # 5 minutes timeout for videos
+            ) as response:
+                if response.status != 200:
+                    self.logger.error(
+                        f"Failed to download video, status: {response.status}, URL: {url[:100]}",
+                        extra={"url": url[:100], "status": response.status}
+                    )
+                    return None
+                
+                # Read content in chunks to handle large files
+                content = b''
+                async for chunk in response.content.iter_chunked(8192):
+                    content += chunk
+                
+                self.logger.info(
+                    f"Successfully downloaded video: {len(content)} bytes ({len(content)/1024/1024:.2f} MB)",
+                    extra={
+                        "url": url[:60],
+                        "size_mb": f"{len(content)/1024/1024:.2f}"
                     }
                 )
-                with urllib.request.urlopen(req, timeout=300) as response:  # 5 minutes timeout for videos
-                    with open(temp_path, 'wb') as f:
-                        # Read in chunks to handle large files
-                        while True:
-                            chunk = response.read(8192)
-                            if not chunk:
-                                break
-                            f.write(chunk)
-            
-            # Run download in thread pool
-            await asyncio.to_thread(download_sync)
-            
-            # Read the downloaded file
-            with open(temp_path, 'rb') as f:
-                content = f.read()
-            
-            self.logger.info(
-                f"Successfully downloaded video with yt-dlp: {len(content)} bytes ({len(content)/1024/1024:.2f} MB)",
-                extra={
-                    "url": url[:60],
-                    "size_mb": f"{len(content)/1024/1024:.2f}"
-                }
-            )
-            
-            return content
+                
+                return content
                 
         except Exception as e:
             self.logger.error(
-                f"Error downloading video with yt-dlp: {e}",
+                f"Error downloading video: {e}",
                 extra={"url": url[:80]},
                 exc_info=True
             )
             return None
-        finally:
-            # Clean up temporary file
-            if temp_path and os.path.exists(temp_path):
-                try:
-                    os.unlink(temp_path)
-                except Exception:
-                    pass
 
     async def _upload_video_to_s3(self, video_data: bytes, filename: str) -> Optional[str]:
         """Upload video to S3."""
@@ -867,11 +895,30 @@ class ReutersVideoWorker(BaseWorker):
                 self.logger.error("Failed to authenticate with Reuters API")
                 return
             
+            # Fetch video channels from API
+            self.logger.info("Fetching video channels from API...")
+            channels_xml = await self._fetch_video_channels()
+            if not channels_xml:
+                self.logger.error("Failed to fetch video channels from API")
+                return
+            
+            # Parse channels list
+            channels = self._parse_channels_list(channels_xml)
+            if not channels:
+                self.logger.warning("No video channels found, using fallback list")
+                # Fallback to hardcoded list if API fails
+                channels = [{"alias": ch, "description": ""} for ch in VIDEO_CHANNELS]
+            
+            self.logger.info(f"Processing {len(channels)} video channels")
+            
             saved_count = 0
             skipped_count = 0
             
             # Process each video channel
-            for channel in VIDEO_CHANNELS:
+            for channel_info in channels:
+                channel = channel_info["alias"]
+                channel_desc = channel_info.get("description", "")
+                self.logger.info(f"Processing channel: {channel} - {channel_desc}")
                 self.logger.info(f"Processing channel: {channel}")
                 
                 # Fetch items list from this channel
@@ -964,9 +1011,17 @@ class ReutersVideoWorker(BaseWorker):
                                 if video_s3_key:
                                     self.logger.info(f"Successfully uploaded video to S3 for {guid}: {video_s3_key}")
                                 else:
-                                    self.logger.warning(f"Failed to upload video to S3 for {guid}")
+                                    self.logger.warning(f"Failed to upload video to S3 for {guid} - skipping article (video not ready)")
+                                    # If video upload failed, skip saving this article
+                                    channel_skipped += 1
+                                    skipped_count += 1
+                                    continue
                             else:
-                                self.logger.warning(f"Failed to download video for {guid} from {original_video_url[:80]}")
+                                self.logger.warning(f"Failed to download video for {guid} from {original_video_url[:80]} - skipping article (video not ready)")
+                                # If video download failed, skip saving this article
+                                channel_skipped += 1
+                                skipped_count += 1
+                                continue
                         else:
                             self.logger.debug(f"No video URL found for {guid}")
                         
@@ -992,11 +1047,26 @@ class ReutersVideoWorker(BaseWorker):
                                 if image_s3_key:
                                     self.logger.info(f"Successfully uploaded image to S3 for {guid}: {image_s3_key}")
                                 else:
-                                    self.logger.warning(f"Failed to upload image to S3 for {guid}")
+                                    self.logger.warning(f"Failed to upload image to S3 for {guid} - skipping article (image not ready)")
+                                    # If image upload failed, skip saving this article
+                                    channel_skipped += 1
+                                    skipped_count += 1
+                                    continue
                             else:
-                                self.logger.warning(f"Failed to download image for {guid} from {original_image_url[:80]}")
+                                self.logger.warning(f"Failed to download image for {guid} from {original_image_url[:80]} - skipping article (image not ready)")
+                                # If image download failed, skip saving this article
+                                channel_skipped += 1
+                                skipped_count += 1
+                                continue
                         else:
                             self.logger.debug(f"No image URL found for {guid}")
+                        
+                        # If neither video nor image was successfully downloaded and uploaded, skip article
+                        if not video_s3_key and not image_s3_key:
+                            self.logger.warning(f"No video or image available for {guid} - skipping article (media not ready)")
+                            channel_skipped += 1
+                            skipped_count += 1
+                            continue
 
                         # Add video or image to HTML
                         media_html = ""
@@ -1008,30 +1078,9 @@ class ReutersVideoWorker(BaseWorker):
                                     Your browser does not support the video tag.
                                 </video>
                             </div>'''
-                        elif original_video_url:
-                            # Fallback to direct Reuters URL if S3 upload failed
-                            if "reuters.com" in original_video_url or "rmb.reuters.com" in original_video_url:
-                                video_url_with_token = f"{original_video_url}?token={self.auth_token}"
-                            else:
-                                video_url_with_token = original_video_url
-                            
-                            media_html = f'''<div class="reuters-video-player" style="margin: 15px 0;">
-                                <video controls style="max-width: 100%; height: auto; width: 100%;" poster="{image_s3_key if image_s3_key else ''}">
-                                    <source src="{video_url_with_token}" type="video/mp4">
-                                    Your browser does not support the video tag.
-                                </video>
-                            </div>'''
                         elif image_s3_key:
-                            # Use image if video not available
+                            # Use image if video not available (should be rare, but only if image S3 upload succeeded)
                             media_html = f'<div class="reuters-video-image" style="margin: 15px 0;"><img src="{image_s3_key}" alt="{detail_data.get("headline", "Reuters Video")}" style="max-width: 100%; height: auto;" /></div>'
-                        elif original_image_url:
-                            # Fallback to direct Reuters URL if S3 upload failed
-                            if "reuters.com" in original_image_url or "rmb.reuters.com" in original_image_url:
-                                image_url_with_token = f"{original_image_url}?token={self.auth_token}"
-                            else:
-                                image_url_with_token = original_image_url
-                            
-                            media_html = f'<div class="reuters-video-image" style="margin: 15px 0;"><img src="{image_url_with_token}" alt="{detail_data.get("headline", "Reuters Video")}" style="max-width: 100%; height: auto;" /></div>'
 
                         body_html = f'<div dir="{text_direction}" style="{dir_style}">{media_html}{paragraph_html}</div>'
                         

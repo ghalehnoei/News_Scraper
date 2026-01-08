@@ -440,9 +440,18 @@ let isLoading = false;
 let hasMore = {{ 'true' if pagination.has_more else 'false' }};
 let currentOffset = {{ pagination.offset }};
 let currentLimit = {{ pagination.limit }};
-const loadingIndicator = document.getElementById('loading-indicator');
+// Track loaded article IDs to prevent duplicates
+const loadedArticleIds = new Set();
+// Initialize with current articles on page
+document.querySelectorAll('.news-card[data-news-id]').forEach(card => {
+    const newsId = card.getAttribute('data-news-id');
+    if (newsId) {
+        loadedArticleIds.add(newsId);
+    }
+});
 
 // Hide loading indicator initially if no more articles
+const loadingIndicator = document.getElementById('loading-indicator');
 if (loadingIndicator && !hasMore) {
     loadingIndicator.style.display = 'none';
 }
@@ -466,11 +475,14 @@ function buildQueryParams(offset) {
 
 // Load more articles
 async function loadMoreArticles() {
-    if (isLoading || !hasMore) return;
+    if (isLoading || !hasMore) {
+        return;
+    }
     
     isLoading = true;
-    if (loadingIndicator) {
-        loadingIndicator.style.display = 'block';
+    const indicator = document.getElementById('loading-indicator');
+    if (indicator) {
+        indicator.style.display = 'block';
     }
     
     try {
@@ -488,11 +500,19 @@ async function loadMoreArticles() {
             // Append new articles to container (preserves view mode)
             const newsContainer = document.getElementById('newsContainer');
             const newCards = [];
+            let addedCount = 0;
             
             data.items.forEach(article => {
+                // Skip if article already loaded (prevent duplicates)
+                if (loadedArticleIds.has(article.id)) {
+                    return;
+                }
+                
                 const articleCard = createArticleCard(article);
                 newCards.push(articleCard);
                 newsContainer.appendChild(articleCard);
+                loadedArticleIds.add(article.id);
+                addedCount++;
             });
             
             // Highlight search words in new articles (after appending to DOM)
@@ -509,23 +529,31 @@ async function loadMoreArticles() {
                 });
             }
             
-            // Update pagination state
-            currentOffset = nextOffset;
-            hasMore = data.pagination.has_more;
+            // Update pagination state only if we actually added articles
+            if (addedCount > 0) {
+                currentOffset = nextOffset;
+                hasMore = data.pagination && data.pagination.has_more === true;
+            } else {
+                // If all articles were duplicates, try next page
+                currentOffset = nextOffset;
+                // Only set hasMore to false if server says no more
+                hasMore = data.pagination && data.pagination.has_more === true;
+            }
             
-            if (!hasMore && loadingIndicator) {
-                loadingIndicator.style.display = 'none';
+            if (!hasMore && indicator) {
+                indicator.style.display = 'none';
             }
         } else {
             hasMore = false;
-            if (loadingIndicator) {
-                loadingIndicator.style.display = 'none';
+            if (indicator) {
+                indicator.style.display = 'none';
             }
         }
     } catch (error) {
         console.error('Error loading more articles:', error);
-        if (loadingIndicator) {
-            loadingIndicator.innerHTML = '<p style="color: #e74c3c;">خطا در بارگذاری اخبار بیشتر</p>';
+        const indicator = document.getElementById('loading-indicator');
+        if (indicator) {
+            indicator.innerHTML = '<p style="color: #e74c3c;">خطا در بارگذاری اخبار بیشتر</p>';
         }
     } finally {
         isLoading = false;
@@ -665,11 +693,16 @@ function scrollToTop() {
 
 // Show/hide scroll to top button based on scroll position
 let scrollTimeout;
+let lastScrollTime = 0;
+const SCROLL_THROTTLE = 300; // Throttle scroll events to every 300ms
+
 window.addEventListener('scroll', () => {
+    const now = Date.now();
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    
     // Throttle scroll events
     clearTimeout(scrollTimeout);
     scrollTimeout = setTimeout(() => {
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
         const windowHeight = window.innerHeight;
         const documentHeight = document.documentElement.scrollHeight;
         
@@ -681,8 +714,19 @@ window.addEventListener('scroll', () => {
         }
         
         // Check if user scrolled near bottom (within 300px) for infinite scroll
-        if (scrollTop + windowHeight >= documentHeight - 300) {
+        // Only trigger if:
+        // 1. Not currently loading
+        // 2. Has more articles
+        // 3. Enough time has passed since last check
+        const timeDelta = now - lastScrollTime;
+        const distanceFromBottom = documentHeight - (scrollTop + windowHeight);
+        
+        if (distanceFromBottom <= 300 && 
+            !isLoading && 
+            hasMore && 
+            timeDelta > SCROLL_THROTTLE) {
             loadMoreArticles();
+            lastScrollTime = now;
         }
     }, 100);
 });

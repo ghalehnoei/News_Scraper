@@ -30,6 +30,7 @@ from app.sources.eghtesadonline import EghtesadOnlineWorker
 from app.sources.reuters_photos import ReutersPhotosWorker
 from app.sources.reuters_text import ReutersTextWorker
 from app.sources.reuters_video import ReutersVideoWorker
+from app.sources.afp_text import AFPTextWorker
 
 
 async def main() -> None:
@@ -86,6 +87,8 @@ async def main() -> None:
         worker = ReutersTextWorker()
     elif settings.worker_source == "reuters_video":
         worker = ReutersVideoWorker()
+    elif settings.worker_source == "afp_text":
+        worker = AFPTextWorker()
     else:
         # Fallback to base worker for unknown sources
         worker = BaseWorker(settings.worker_source)

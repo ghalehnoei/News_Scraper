@@ -26,6 +26,9 @@ def setup_logging(source: Optional[str] = None) -> logging.Logger:
     # Create console handler
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(logging.DEBUG)
+    # Ensure UTF-8 encoding for the handler
+    if hasattr(handler.stream, 'reconfigure'):
+        handler.stream.reconfigure(encoding='utf-8')
 
     # Create formatter with source awareness
     if source:

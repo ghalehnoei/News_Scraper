@@ -95,6 +95,8 @@ class News(Base):
     published_at = Column(String(100), nullable=True)  # Raw string from source
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
     image_url = Column(String(1000), nullable=True)
+    video_url = Column(String(1000), nullable=True)  # Video URL for video content
+    is_vertical_image = Column(Boolean, default=False, nullable=False)  # Whether image is vertical/portrait
     category = Column(String(200), nullable=True, index=True)  # Normalized category
     raw_category = Column(String(200), nullable=True)  # Original category from source
     language = Column(String(10), nullable=True)  # Language code (e.g., 'en', 'ar', 'fr')

@@ -170,6 +170,9 @@ SOURCE_NAMES = {
     "reuters_photos": "عکس‌های رویترز",
     "reuters_text": "اخبار رویترز",
     "reuters_video": "ویدئوهای رویترز",
+    "afp_text": "فرانس‌پرس متن",
+    "afp_video": "فرانس‌پرس ویدئو",
+    "afp_photo": "فرانس‌پرس عکس",
 }
 
 # Color codes for sources (used in API responses)
@@ -196,6 +199,9 @@ SOURCE_COLORS = {
     "reuters_photos": "#c0392b", # قرمز تیره
     "reuters_text": "#c0392b", # قرمز تیره (مشابه photos)
     "reuters_video": "#c0392b", # قرمز تیره (مشابه photos و text)
+    "afp_text": "#1f77b4", # آبی فرانسه
+    "afp_video": "#ff7f0e", # نارنجی برای ویدیو
+    "afp_photo": "#2ca02c", # سبز برای عکس
 }
 
 
@@ -438,6 +444,8 @@ async def get_latest_news(
             "published_at": published_at_persian,  # Use Persian formatted date
             "created_at": article.created_at.isoformat() if article.created_at else None,
             "image_url": image_url,
+            "video_url": getattr(article, 'video_url', None),  # Video URL for video content
+            "is_vertical_image": getattr(article, 'is_vertical_image', False),  # Whether image is vertical
             "category": article.category,
             "raw_category": article.raw_category,
             "is_ltr": is_ltr,  # Text direction flag for title
@@ -848,6 +856,8 @@ async def get_news_by_id(
         "published_at": published_at_persian,
         "created_at": article.created_at.isoformat() if article.created_at else None,
         "image_url": image_url,
+        "video_url": getattr(article, 'video_url', None),  # Video URL for video content
+        "is_vertical_image": getattr(article, 'is_vertical_image', False),  # Whether image is vertical
         "category": article.category,
         "raw_category": article.raw_category,  # Original category for display
         "is_ltr": is_ltr,  # Text direction flag for title

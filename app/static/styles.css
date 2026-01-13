@@ -500,6 +500,21 @@ main {
     display: block;
 }
 
+/* Vertical images: show complete image without cropping */
+.news-image-vertical {
+    height: auto !important; /* Allow container to adjust to image height */
+    max-height: 400px !important; /* Reasonable max to prevent layout breaking */
+    overflow: hidden !important; /* Keep overflow controlled */
+}
+
+.news-image-vertical img {
+    object-fit: contain !important; /* Show entire image without cropping */
+    background-color: #000 !important; /* Black background for letterboxing */
+    height: auto !important;
+    max-height: 400px !important;
+    width: 100% !important;
+}
+
 .news-card:hover .news-image img {
     transform: scale(1.05);
 }

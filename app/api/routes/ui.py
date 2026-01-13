@@ -169,6 +169,9 @@ SOURCE_NAMES = {
     "reuters_photos": "عکس‌های رویترز",
     "reuters_text": "اخبار رویترز",
     "reuters_video": "ویدئوهای رویترز",
+    "afp_text": "فرانس‌پرس متن",
+    "afp_video": "فرانس‌پرس ویدئو",
+    "afp_photo": "فرانس‌پرس عکس",
 }
 
 
@@ -212,6 +215,9 @@ SOURCE_COLORS = {
     "reuters_photos": "#c0392b", # قرمز تیره
     "reuters_text": "#c0392b", # قرمز تیره (مشابه photos)
     "reuters_video": "#c0392b", # قرمز تیره (مشابه photos و text)
+    "afp_text": "#1f77b4", # آبی فرانسه
+    "afp_video": "#ff7f0e", # نارنجی برای ویدیو
+    "afp_photo": "#2ca02c", # سبز برای عکس
 }
 
 # Persian names for normalized categories
@@ -520,6 +526,8 @@ async def news_grid(
             "source_color": source_color,
             "published_at": published_at,
             "image_url": image_url,
+            "video_url": getattr(article, 'video_url', None),  # Video URL for video content
+            "is_vertical_image": getattr(article, 'is_vertical_image', False),  # Vertical image flag
             "category": article.category,  # Normalized category
             "category_persian": CATEGORY_NAMES.get(article.category, article.category) if article.category else None,  # Persian name for display
             "raw_category": article.raw_category,  # Original category for reference

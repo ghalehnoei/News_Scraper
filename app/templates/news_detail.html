@@ -18,20 +18,28 @@
         </div>
     </div>
     
-    {% if article.image_url %}
-    <div class="news-image-large">
-        <img src="{{ article.image_url }}" alt="{{ article.title }}"
-             onerror="this.style.display='none';">
-    </div>
+    {% if article.source == 'afp_video' %}
+        {% if article.body_html %}
+        <div class="news-body" dir="{{ 'rtl' if article.language in ['ar', 'fa'] else 'ltr' }}"{% if article.language in ['ar', 'fa'] %} style="font-family: 'Vazir', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;"{% endif %}>
+            {{ article.body_html|safe }}
+        </div>
+        {% endif %}
+    {% else %}
+        {% if article.image_url %}
+        <div class="news-image-large">
+            <img src="{{ article.image_url }}" alt="{{ article.title }}"
+                 onerror="this.style.display='none';">
+        </div>
+        {% endif %}
     {% endif %}
-    
+
     {% if article.summary %}
     <div class="news-summary"{% if article.language in ['ar', 'fa'] %} style="font-family: 'Vazir', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;"{% endif %}>
         <p>{{ article.summary }}</p>
     </div>
     {% endif %}
     
-    {% if article.body_html %}
+    {% if article.body_html and article.source != 'afp_video' %}
     <div class="news-body" dir="{{ 'rtl' if article.language in ['ar', 'fa'] else 'ltr' }}"{% if article.language in ['ar', 'fa'] %} style="font-family: 'Vazir', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;"{% endif %}>
         {% if article.source == 'reuters_video' %}
         <div id="reutersVideoContainer">

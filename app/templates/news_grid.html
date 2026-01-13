@@ -80,9 +80,9 @@
                 <!-- Grid View Structure -->
                 <div class="news-card-grid-view">
                     {% if article.image_url %}
-                    <div class="news-image">
-                        <img src="{{ article.image_url }}" alt="{{ article.title }}" 
-                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div class="news-image{% if article.is_vertical_image %} news-image-vertical{% endif %}">
+                        <img src="{{ article.image_url }}" alt="{{ article.title }}"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"{% if article.is_vertical_image %} style="object-fit: contain; background-color: #000; height: auto; max-height: 400px; width: 100%;"{% endif %}>
                         <div class="image-placeholder" style="display: none;">
                             <span>بدون تصویر</span>
                         </div>
@@ -574,15 +574,16 @@ function createArticleCard(article) {
     const sourceColor = article.source_color || getSourceColor(article.source);
     const category = article.raw_category || article.category || '';
     const publishedAt = article.published_at || '';
+    const isVertical = Boolean(article.is_vertical_image);
     
     card.innerHTML = `
         <a href="javascript:void(0);" class="news-card-link">
             <!-- Grid View Structure -->
             <div class="news-card-grid-view">
                 ${imageUrl ? `
-                    <div class="news-image">
-                        <img src="${imageUrl.replace(/"/g, '&quot;')}" alt="${escapeHtml(article.title)}" 
-                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <div class="news-image${isVertical ? ' news-image-vertical' : ''}">
+                        <img src="${imageUrl.replace(/"/g, '&quot;')}" alt="${escapeHtml(article.title)}"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"${isVertical ? ' style="object-fit: contain; background-color: #000; height: auto; max-height: 400px; width: 100%;"' : ''}>
                         <div class="image-placeholder" style="display: none;">
                             <span>بدون تصویر</span>
                         </div>
@@ -650,7 +651,10 @@ const sourceNames = {
     "iqna": "خبرگزاری ایکنا",
     "hamshahri": "همشهری‌آنلاین",
     "donyaeqtesad": "دنیای اقتصاد",
-    "snn": "خبرگزاری دانشجو"
+    "snn": "خبرگزاری دانشجو",
+    "afp_text": "فرانس‌پرس متن",
+    "afp_video": "فرانس‌پرس ویدئو",
+    "afp_photo": "فرانس‌پرس عکس"
 };
 
 // Source colors mapping
@@ -670,7 +674,10 @@ const sourceColors = {
     "iqna": "#8e44ad",
     "hamshahri": "#e67e22",
     "donyaeqtesad": "#16a085",
-    "snn": "#e74c3c"
+    "snn": "#e74c3c",
+    "afp_text": "#1f77b4",
+    "afp_video": "#ff7f0e",
+    "afp_photo": "#2ca02c"
 };
 
 function getSourcePersianName(source) {

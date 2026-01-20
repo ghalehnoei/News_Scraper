@@ -9,12 +9,15 @@ import base64
 import xml.etree.ElementTree as ET
 
 import aiohttp
+import requests
 import os
 from sqlalchemy import select
 from dotenv import load_dotenv
+from urllib.parse import quote_plus
 
 # Load environment variables from .env file
-load_dotenv()
+# Ensure .env values override any existing process env vars
+load_dotenv(override=True)
 
 from app.core.config import settings
 from app.core.logging import setup_logging
@@ -34,11 +37,33 @@ class AFPTextWorker(BaseWorker):
     def __init__(self):
         """Initialize AFP text worker."""
         super().__init__(source_name="afp_text")
-        self.afp_username = os.getenv("AFP_USERNAME", "ghasemzade@gmail.com")
-        self.afp_password = os.getenv("AFP_PASSWORD", "1234@Qwe")
-        self.afp_basic_auth = os.getenv(
-            "AFP_BASIC_AUTH",
-            "SVRBQTQ5X0FQSV8yMDI1OkIxTmkwdDJRNXZMOUh4R2F4STVIMS1tMVRJREN1WGczREQ1OWk2YUg="
+        # Load sensitive credentials from environment variables (no defaults)
+        def _clean_env(value: Optional[str]) -> Optional[str]:
+            if value is None:
+                return None
+            cleaned = value.strip()
+            if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in ("'", '"'):
+                cleaned = cleaned[1:-1].strip()
+            return cleaned or None
+
+        self.afp_username = _clean_env(os.getenv("AFP_USERNAME"))
+        self.afp_password = _clean_env(os.getenv("AFP_PASSWORD"))
+        self.afp_basic_auth = _clean_env(os.getenv("AFP_BASIC_AUTH"))
+        if self.afp_basic_auth and self.afp_basic_auth.lower().startswith("basic "):
+            self.afp_basic_auth = self.afp_basic_auth.split(" ", 1)[1].strip()
+        # Log presence and masked values only (never log secrets)
+        def _mask(value: Optional[str]) -> str:
+            if not value:
+                return "missing"
+            if len(value) <= 6:
+                return "***"
+            return f"{value[:2]}***{value[-2:]}"
+
+        self.logger.info(
+            "AFP env loaded (masked): AFP_USERNAME=%s, AFP_PASSWORD=%s, AFP_BASIC_AUTH=%s",
+            _mask(self.afp_username),
+            _mask(self.afp_password),
+            _mask(self.afp_basic_auth),
         )
         self.access_token = None
         self.http_session: Optional[aiohttp.ClientSession] = None
@@ -69,48 +94,54 @@ class AFPTextWorker(BaseWorker):
                 request_type="api"
             )
 
-            self.logger.info(
-                "Authenticating with AFP API...",
-                extra={"source": self.source_name}
+
+            # Build auth URL and headers from environment variables
+            if not self.afp_username or not self.afp_password:
+                self.logger.error("AFP credentials not set in environment (AFP_USERNAME/AFP_PASSWORD).")
+                return False
+
+            if not self.afp_basic_auth:
+                self.logger.error("AFP_BASIC_AUTH not set in environment. This is required for client authentication.")
+                return False
+
+            # Build auth URL exactly like test.py
+            auth_url = (
+                f"https://afp-apicore-prod.afp.com/oauth/token"
+                f"?username={self.afp_username}"
+                f"&password={self.afp_password}"
+                f"&grant_type=password"
             )
 
-            # Use exact same URL as working Postman request
-            auth_url = "https://afp-apicore-prod.afp.com/oauth/token?grant_type=password&username=ghasemzade%40gmail.com&password=1234%40Qwe"
-
-            # Exact same headers as working Postman request
+            # Build headers exactly like test.py
             headers = {
-                "Accept": "application/json",
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Authorization": "Basic SVRBQTQ5X0FQSV8yMDI1OkIxTmkwdDJRNXZMOUh4R2F4STVIMS1tMVRJRUN1WGczREQ1OWk2YUg="
+                'Accept': 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': 'Basic SVRBQTQ5X0FQSV8yMDI1OkIxTmkwdDJRNXZMOUh4R2F4STVIMS1tMVRJRUN1WGczREQ1OWk2YUg='
             }
 
-            # Empty body as in working Postman request
-            data = ""
+            payload = {}
 
-            self.logger.debug(f"Auth URL: {auth_url}")
-            self.logger.debug(f"Basic Auth: {self.afp_basic_auth}")
-            self.logger.debug(f"Username: {self.afp_username}")
-            self.logger.debug(f"Password: {self.afp_password}")
-            self.logger.debug(f"Headers: {headers}")
+            # Use requests module for authentication (exactly like test.py)
+            def authenticate_sync():
+                return requests.request("GET", auth_url, headers=headers, data=payload)
 
-            # Create a fresh session without default headers that might interfere
-            async with aiohttp.ClientSession() as session:
-                async with session.post(auth_url, headers=headers, data=data) as response:
-                    if response.status != 200:
-                        self.logger.error(f"Authentication failed with status {response.status}")
-                        response_text = await response.text()
-                        self.logger.error(f"Response: {response_text}")
-                        return False
+            # Run requests in thread pool (sync operation in async context)
+            response = await asyncio.to_thread(authenticate_sync)
 
-                    json_response = await response.json()
+            if response.status_code != 200:
+                self.logger.error(f"Authentication failed with status {response.status_code}")
+                self.logger.error(f"Response: {response.text}")
+                return False
 
-                    # Extract access token
-                    if "access_token" in json_response:
-                        self.access_token = json_response["access_token"]
-                        self.logger.info("Successfully authenticated with AFP API")
-                        return True
-                        self.logger.error(f"Access token not found in response: {json_response}")
-                        return False
+            json_response = response.json()
+
+            # Extract access token
+            if "access_token" in json_response:
+                self.access_token = json_response["access_token"]
+                return True
+            else:
+                self.logger.error(f"Access token not found in response: {json_response}")
+                return False
 
         except Exception as e:
             self.logger.error(f"Error authenticating with AFP API: {e}", exc_info=True)
@@ -164,7 +195,6 @@ class AFPTextWorker(BaseWorker):
                 }
             }
             
-            self.logger.info(f"Searching AFP news for language: {lang}")
 
             async with session.post(search_url, headers=headers, json=body) as response:
                 if response.status != 200:
@@ -210,8 +240,11 @@ class AFPTextWorker(BaseWorker):
                 # Extract body from news field (paragraphs)
                 news_content = doc.get("news") or ""
                 if isinstance(news_content, list):
-                    article_data["body"] = " ".join(str(item) for item in news_content)
+                    # Keep paragraphs as list for proper HTML structure
+                    article_data["body_paragraphs"] = [str(item).strip() for item in news_content if str(item).strip()]
+                    article_data["body"] = " ".join(article_data["body_paragraphs"])  # Keep joined version for backward compatibility
                 else:
+                    article_data["body_paragraphs"] = [str(news_content).strip()] if str(news_content).strip() else []
                     article_data["body"] = str(news_content)
 
                 # Use abstract as summary
@@ -235,7 +268,6 @@ class AFPTextWorker(BaseWorker):
                 
                 articles.append(article_data)
             
-            self.logger.info(f"Parsed {len(articles)} articles from search results")
             return articles
 
         except Exception as e:
@@ -269,10 +301,6 @@ class AFPTextWorker(BaseWorker):
                 existing = result.scalar_one_or_none()
                 
                 if existing:
-                    self.logger.debug(
-                        f"Article already exists in database: {article_data['guid']}",
-                        extra={"guid": article_data["guid"]}
-                    )
                     return False
                 
                 normalized_category, raw_category = normalize_category(
@@ -299,12 +327,29 @@ class AFPTextWorker(BaseWorker):
                 if not published_at:
                     published_at = datetime.utcnow()
                 
-                # Build body HTML
+                # Build body HTML with exact paragraphs from news field
                 body_html = ""
+                
+                # Add title with red color if priority is 1 or 2, otherwise default color
+                priority = article_data.get("priority", 3)
+                title = article_data.get("title", "")
+                if title:
+                    if priority in [1, 2]:
+                        body_html += f'<h2 style="color: red;">{title}</h2>'
+                    else:
+                        body_html += f'<h2>{title}</h2>'
+                
                 if article_data.get("summary"):
                     body_html += f"<p><strong>{article_data['summary']}</strong></p>"
-                if article_data.get("body"):
-                    body_html += f"<p>{article_data['body']}</p>"
+                
+                # Use body_paragraphs if available, otherwise fall back to body
+                paragraphs = article_data.get("body_paragraphs", [])
+                if paragraphs:
+                    for paragraph in paragraphs:
+                        if paragraph.strip():  # Only add non-empty paragraphs
+                            body_html += f'<p style="color: black;">{paragraph}</p>'
+                elif article_data.get("body"):
+                    body_html += f'<p style="color: black;">{article_data["body"]}</p>'
                 
                 news = News(
                     source=self.source_name,
@@ -346,67 +391,52 @@ class AFPTextWorker(BaseWorker):
 
     async def fetch_news(self) -> None:
         """Fetch text news from AFP API."""
-        self.logger.info(f"Starting to fetch text news from {self.source_name}")
-        
         try:
-            # Authenticate first
             if not await self._authenticate():
                 self.logger.error("Failed to authenticate with AFP API")
                 return
             
-            # Languages to fetch (from workflow: en, ar, fr, es)
             languages = ["en", "ar", "fr", "es"]
-            
             saved_count = 0
             skipped_count = 0
             
             for lang in languages:
                 try:
-                    # Search for news in this language
                     search_response = await self._search_news(lang=lang, max_rows=50)
                     if not search_response:
-                        self.logger.warning(f"No search results for language: {lang}")
                         continue
                     
-                    # Parse search results
                     articles = await self._parse_search_results(search_response)
                     if not articles:
-                        self.logger.warning(f"No articles parsed for language: {lang}")
                         continue
                     
-                    self.logger.info(f"Found {len(articles)} articles for language: {lang}")
+                    total = len(articles)
+                    self.logger.info(f"Processing {total} articles ({lang})...")
                     
-                    # Process each article
-                    for article in articles:
+                    for i, article in enumerate(articles, 1):
                         try:
                             guid = article.get("guid")
                             if not guid:
                                 continue
                             
-                            # Check if already exists
                             if await self._article_exists(guid):
-                                self.logger.debug(f"Article already exists, skipping: {guid}")
                                 skipped_count += 1
                                 continue
                             
-                            # Save article
                             if await self._save_article(article):
                                 saved_count += 1
+                                self.logger.info(f"Saved {saved_count}/{total} ({lang}): {article.get('title', 'N/A')[:50]}")
                             
                         except Exception as e:
                             self.logger.error(f"Error processing article: {e}", exc_info=True)
                             continue
                     
-                    # Small delay between languages
+                    self.logger.info(f"Processed {total} articles ({lang}), saved {saved_count}, skipped {skipped_count}")
                     await asyncio.sleep(1)
                     
                 except Exception as e:
                     self.logger.error(f"Error processing language {lang}: {e}", exc_info=True)
                     continue
-            
-            self.logger.info(
-                f"Finished fetching text news from {self.source_name}: {saved_count} new articles saved, {skipped_count} articles skipped"
-            )
             
         except Exception as e:
             self.logger.error(f"Error in fetch_news: {e}", exc_info=True)

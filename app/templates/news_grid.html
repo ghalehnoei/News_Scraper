@@ -241,23 +241,7 @@ async function openNewsModal(newsId) {
             ` : ''}
             ${highlightedBody ? `
                 <div class="modal-news-body" dir="${article.language == 'ar' || article.language == 'fa' ? 'rtl' : 'ltr'}" style="${article.language == 'ar' || article.language == 'fa' ? 'font-family: \'Vazir\', \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif;' : ''}">
-                    ${article.source === 'reuters_video' ? `
-                        <div id="reutersVideoContainer-${article.id}">
-                            ${highlightedBody}
-                            <div class="hq-video-download-container" style="margin-top: 10px; text-align: right; direction: rtl;">
-                                <button id="downloadHqVideoBtn-${article.id}" class="download-hq-video-btn" onclick="downloadHqVideo('${article.id}')" style="padding: 10px 20px; background-color: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-family: 'Vazir', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-                                    دانلود ویدیوی اصلی
-                                </button>
-                                <div id="downloadProgress-${article.id}" style="display: none; margin-top: 10px;">
-                                    <div style="background-color: #ecf0f1; border-radius: 5px; height: 20px; position: relative; overflow: hidden;">
-                                        <div id="progressBar-${article.id}" style="background-color: #3498db; height: 100%; width: 0%; transition: width 0.3s;"></div>
-                                    </div>
-                                    <p id="progressText-${article.id}" style="margin-top: 5px; font-size: 12px; color: #7f8c8d;"></p>
-                                </div>
-                                <div id="downloadResult-${article.id}" style="display: none; margin-top: 10px;"></div>
-                            </div>
-                        </div>
-                    ` : highlightedBody}
+                    ${highlightedBody}
                 </div>
             ` : ''}
             <div class="modal-news-footer">
@@ -266,17 +250,6 @@ async function openNewsModal(newsId) {
                 </a>
             </div>
         `;
-        
-        // Move download button after video player for reuters_video
-        const videoContainer = modalBody.querySelector(`#reutersVideoContainer-${article.id}`);
-        if (videoContainer) {
-            const videoPlayer = videoContainer.querySelector('.reuters-video-player');
-            const downloadContainer = videoContainer.querySelector('.hq-video-download-container');
-            if (videoPlayer && downloadContainer) {
-                // Insert download button right after video player
-                videoPlayer.insertAdjacentElement('afterend', downloadContainer);
-            }
-        }
     } catch (error) {
         modalBody.innerHTML = `
             <div class="modal-error">
@@ -652,6 +625,9 @@ const sourceNames = {
     "hamshahri": "همشهری‌آنلاین",
     "donyaeqtesad": "دنیای اقتصاد",
     "snn": "خبرگزاری دانشجو",
+    "reuters_photos": "رویترز عکس",
+    "reuters_text": "رویترز متن",
+    "reuters_video": "رویترز ویدئو",
     "afp_text": "فرانس‌پرس متن",
     "afp_video": "فرانس‌پرس ویدئو",
     "afp_photo": "فرانس‌پرس عکس"
@@ -675,6 +651,9 @@ const sourceColors = {
     "hamshahri": "#e67e22",
     "donyaeqtesad": "#16a085",
     "snn": "#e74c3c",
+    "reuters_photos": "#c0392b",
+    "reuters_text": "#c0392b",
+    "reuters_video": "#c0392b",
     "afp_text": "#1f77b4",
     "afp_video": "#ff7f0e",
     "afp_photo": "#2ca02c"

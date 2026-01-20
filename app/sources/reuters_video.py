@@ -7,9 +7,10 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from io import BytesIO
 import logging
+import tempfile
+import os
 
 import aiohttp
-import os
 from sqlalchemy import select
 from dotenv import load_dotenv
 
@@ -459,19 +460,21 @@ class ReutersVideoWorker(BaseWorker):
                 if item_class_elem is not None and item_class_elem.get("qcode") == "icls:video":
                     video_items.append(news_item)
             
-            logger.info(f"Found {len(video_items)} video items, searching for video with format='fmt:H264/mpeg' and height='432' for {data.get('guid', 'N/A')[:30]}")
+            logger.info(f"Found {len(video_items)} video items, searching for video with rendition='rend:stream:8256:16x9:mp4' for {data.get('guid', 'N/A')[:30]}")
+            
+            # Target rendition for high-quality video
+            target_rendition = 'rend:stream:8256:16x9:mp4'
             
             # Search in video items first
             for video_item in video_items:
                 video_remote_contents = video_item.findall('.//{http://iptc.org/std/nar/2006-10-01/}contentSet/{http://iptc.org/std/nar/2006-10-01/}remoteContent')
                 for remote_content in video_remote_contents:
-                    format_attr = remote_content.get("format", "")
-                    height_attr = remote_content.get("height", "")
+                    rendition = remote_content.get("rendition", "")
                     content_type = remote_content.get("contenttype", "")
                     
-                    # Check for H264/mpeg format and height 432
-                    if "H264/mpeg" in format_attr and height_attr == "432" and "video" in content_type.lower():
-                        logger.info(f"Found video with format={format_attr}, height={height_attr}, contenttype={content_type}")
+                    # Check for target rendition (case-insensitive)
+                    if rendition.lower() == target_rendition.lower() and "video" in content_type.lower():
+                        logger.info(f"Found video with rendition={rendition}, contenttype={content_type}")
                         # Try altLoc first (it's the authenticated URL), then href as fallback
                         video_url = None
                         alt_loc_elem = remote_content.find("{http://www.reuters.com/ns/2003/08/content}altLoc")
@@ -502,13 +505,12 @@ class ReutersVideoWorker(BaseWorker):
             if not data["video_url"]:
                 logger.warning("Video not found in video items, searching all remoteContent")
                 for remote_content in all_remote_contents:
-                    format_attr = remote_content.get("format", "")
-                    height_attr = remote_content.get("height", "")
+                    rendition = remote_content.get("rendition", "")
                     content_type = remote_content.get("contenttype", "")
                     
-                    # Check for H264/mpeg format and height 432
-                    if "H264/mpeg" in format_attr and height_attr == "432" and "video" in content_type.lower():
-                        logger.info(f"Found video in all remoteContent with format={format_attr}, height={height_attr}, contenttype={content_type}")
+                    # Check for target rendition (case-insensitive)
+                    if rendition.lower() == target_rendition.lower() and "video" in content_type.lower():
+                        logger.info(f"Found video in all remoteContent with rendition={rendition}, contenttype={content_type}")
                         # Try altLoc first (it's the authenticated URL), then href as fallback
                         video_url = None
                         alt_loc_elem = remote_content.find("{http://www.reuters.com/ns/2003/08/content}altLoc")
@@ -533,7 +535,7 @@ class ReutersVideoWorker(BaseWorker):
                             break
             
             if not data["video_url"]:
-                logger.warning("Video with format='fmt:H264/mpeg' and height='432' not found")
+                logger.warning(f"Video with rendition='{target_rendition}' not found")
             
             # Priority 2: If no BASEIMAGE found, try VIEWIMAGE
             if not data["image_url"]:
@@ -695,7 +697,8 @@ class ReutersVideoWorker(BaseWorker):
             return None
 
     async def _download_video(self, url: str) -> Optional[bytes]:
-        """Download video directly from URL using aiohttp."""
+        """Download video using the proven method from ReutersVideoDownloader."""
+        temp_path = None
         try:
             await self.rate_limiter.acquire(
                 source=self.source_name,
@@ -711,38 +714,70 @@ class ReutersVideoWorker(BaseWorker):
             self.logger.info(f"Downloading video from {url[:80]}...")
             self.logger.debug(f"Full video URL with token: {url_with_token[:200]}")
             
-            # Download video directly using aiohttp
-            session = await self._get_http_session()
-            async with session.get(
-                url_with_token,
+            # Create temporary file
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+            temp_path = temp_file.name
+            temp_file.close()
+            
+            # Download using aiohttp with proper headers (proven method from ReutersVideoDownloader)
+            async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=600),  # 10 minutes timeout
                 headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     'Accept': 'video/mp4,video/*,*/*;q=0.8',
                     'Accept-Language': 'en-US,en;q=0.9',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                },
-                timeout=aiohttp.ClientTimeout(total=300)  # 5 minutes timeout for videos
-            ) as response:
-                if response.status != 200:
-                    self.logger.error(
-                        f"Failed to download video, status: {response.status}, URL: {url[:100]}",
-                        extra={"url": url[:100], "status": response.status}
-                    )
-                    return None
-                
-                # Read content in chunks to handle large files
-                content = b''
-                async for chunk in response.content.iter_chunked(8192):
-                    content += chunk
-                
-                self.logger.info(
-                    f"Successfully downloaded video: {len(content)} bytes ({len(content)/1024/1024:.2f} MB)",
-                    extra={
-                        "url": url[:60],
-                        "size_mb": f"{len(content)/1024/1024:.2f}"
-                    }
-                )
-                
-                return content
+                }
+            ) as session:
+                async with session.get(url_with_token) as response:
+                    if response.status != 200:
+                        self.logger.error(
+                            f"Failed to download video, status: {response.status}, URL: {url[:100]}",
+                            extra={"url": url[:100], "status": response.status}
+                        )
+                        return None
+                    
+                    # Get content length for progress tracking
+                    content_length = response.headers.get('Content-Length')
+                    total_size = int(content_length) if content_length else None
+                    downloaded = 0
+                    
+                    # Download in chunks with progress logging
+                    chunk_size = 8192
+                    with open(temp_path, 'wb') as f:
+                        async for chunk in response.content.iter_chunked(chunk_size):
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            
+                            # Log progress periodically
+                            if total_size:
+                                percent = (downloaded / total_size) * 100
+                                if downloaded % (10 * 1024 * 1024) < chunk_size:  # Log every ~10MB
+                                    self.logger.info(
+                                        f"Download progress: {percent:.1f}% ({downloaded // 1024 // 1024} MB / {total_size // 1024 // 1024} MB)"
+                                    )
+                            else:
+                                if downloaded % (10 * 1024 * 1024) < chunk_size:  # Log every ~10MB
+                                    self.logger.info(f"Downloading... {downloaded // 1024 // 1024} MB downloaded")
+            
+            # Read the downloaded file
+            with open(temp_path, 'rb') as f:
+                video_data = f.read()
+            
+            # Clean up temporary file
+            try:
+                os.unlink(temp_path)
+            except Exception as e:
+                self.logger.warning(f"Failed to delete temp file {temp_path}: {e}")
+            
+            self.logger.info(
+                f"Successfully downloaded video: {len(video_data)} bytes ({len(video_data)/1024/1024:.2f} MB)",
+                extra={
+                    "url": url[:60],
+                    "size_mb": f"{len(video_data)/1024/1024:.2f}"
+                }
+            )
+            
+            return video_data
                 
         except Exception as e:
             self.logger.error(
@@ -750,6 +785,12 @@ class ReutersVideoWorker(BaseWorker):
                 extra={"url": url[:80]},
                 exc_info=True
             )
+            # Clean up temporary file on error
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
             return None
 
     async def _upload_video_to_s3(self, video_data: bytes, filename: str) -> Optional[str]:
@@ -854,6 +895,7 @@ class ReutersVideoWorker(BaseWorker):
                     url=url,
                     published_at=article_data.get("published_at", ""),
                     image_url=article_data.get("image_url", ""),
+                    video_url=article_data.get("video_url", ""),
                     category=normalized_category,
                     raw_category=raw_category,
                     language=article_data.get("language", "en"),
@@ -1096,6 +1138,7 @@ class ReutersVideoWorker(BaseWorker):
                             "summary": "",  # Empty summary for Reuters video
                             "published_at": detail_data.get("sent", ""),
                             "image_url": final_image_url,
+                            "video_url": video_s3_key if video_s3_key else "",
                             "category": detail_data.get("category", "ویدئو"),
                             "language": detail_data.get("language", "en"),  # Language code
                             "is_breaking": is_breaking,  # Breaking news flag

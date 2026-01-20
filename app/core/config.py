@@ -5,10 +5,8 @@ from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-# Determine if we should use .env file (only for local development)
-# In Docker, USE_ENV_FILE should be False or not set, so it uses environment variables
-_use_env_file = os.getenv("USE_ENV_FILE", "false").lower() == "true"
-_env_file_path = ".env" if _use_env_file and os.path.exists(".env") else None
+# Use .env file if it exists (local development). Docker/env will still override with real env vars.
+_env_file_path = ".env" if os.path.exists(".env") else None
 
 
 class Settings(BaseSettings):
@@ -16,7 +14,7 @@ class Settings(BaseSettings):
 
     # Database
     # Use SQLite for local development, PostgreSQL for production
-    database_url: str = "sqlite+aiosqlite:///./news_db.sqlite" if _use_env_file else "postgresql+asyncpg://postgres:postgres@postgres:5432/news_db"
+    database_url: str = "sqlite+aiosqlite:///./news_db.sqlite" if _env_file_path else "postgresql+asyncpg://postgres:postgres@postgres:5432/news_db"
 
     # S3 Storage
     s3_endpoint: str = "http://minio:9000"

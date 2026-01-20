@@ -13,12 +13,15 @@ import tempfile
 import os
 
 import aiohttp
+import requests
 import os
 from sqlalchemy import select
 from dotenv import load_dotenv
+from urllib.parse import quote_plus
 
 # Load environment variables from .env file
-load_dotenv()
+# Ensure .env values override any existing process env vars
+load_dotenv(override=True)
 
 from app.core.config import settings
 from app.core.logging import setup_logging
@@ -38,11 +41,33 @@ class AFPPhotoWorker(BaseWorker):
     def __init__(self):
         """Initialize AFP photo worker."""
         super().__init__(source_name="afp_photo")
-        self.afp_username = os.getenv("AFP_USERNAME", "ghasemzade@gmail.com")
-        self.afp_password = os.getenv("AFP_PASSWORD", "1234@Qwe")
-        self.afp_basic_auth = os.getenv(
-            "AFP_BASIC_AUTH",
-            "SVRBQTQ5X0FQSV8yMDI1OkIxTmkwdDJRNXZMOUh4R2F4STVIMS1tMVRJREN1WGczREQ1OWk2YUg="
+        # Load sensitive credentials from environment variables (no defaults)
+        def _clean_env(value: Optional[str]) -> Optional[str]:
+            if value is None:
+                return None
+            cleaned = value.strip()
+            if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in ("'", '"'):
+                cleaned = cleaned[1:-1].strip()
+            return cleaned or None
+
+        self.afp_username = _clean_env(os.getenv("AFP_USERNAME"))
+        self.afp_password = _clean_env(os.getenv("AFP_PASSWORD"))
+        self.afp_basic_auth = _clean_env(os.getenv("AFP_BASIC_AUTH"))
+        if self.afp_basic_auth and self.afp_basic_auth.lower().startswith("basic "):
+            self.afp_basic_auth = self.afp_basic_auth.split(" ", 1)[1].strip()
+        # Log presence and masked values only (never log secrets)
+        def _mask(value: Optional[str]) -> str:
+            if not value:
+                return "missing"
+            if len(value) <= 6:
+                return "***"
+            return f"{value[:2]}***{value[-2:]}"
+
+        self.logger.info(
+            "AFP env loaded (masked): AFP_USERNAME=%s, AFP_PASSWORD=%s, AFP_BASIC_AUTH=%s",
+            _mask(self.afp_username),
+            _mask(self.afp_password),
+            _mask(self.afp_basic_auth),
         )
         self.access_token = None
         self.http_session: Optional[aiohttp.ClientSession] = None
@@ -67,55 +92,60 @@ class AFPPhotoWorker(BaseWorker):
         return self.http_session
 
     async def _authenticate(self) -> bool:
-        """Authenticate with AFP API and get access token."""
+        """Authenticate with AFP API and get access token using requests module."""
         try:
             await self.rate_limiter.acquire(
                 source=self.source_name,
                 request_type="api"
             )
 
-            self.logger.info(
-                "Authenticating with AFP API...",
-                extra={"source": self.source_name}
+
+            if not self.afp_username or not self.afp_password:
+                self.logger.error("AFP credentials not set in environment (AFP_USERNAME/AFP_PASSWORD).")
+                return False
+
+            if not self.afp_basic_auth:
+                self.logger.error("AFP_BASIC_AUTH not set in environment. This is required for client authentication.")
+                return False
+
+            # Build auth URL exactly like test.py
+            auth_url = (
+                f"https://afp-apicore-prod.afp.com/oauth/token"
+                f"?username={self.afp_username}"
+                f"&password={self.afp_password}"
+                f"&grant_type=password"
             )
 
-            # Use exact same URL as working Postman request
-            auth_url = "https://afp-apicore-prod.afp.com/oauth/token?grant_type=password&username=ghasemzade%40gmail.com&password=1234%40Qwe"
-
-            # Exact same headers as working Postman request
+            # Build headers exactly like test.py
             headers = {
-                "Accept": "application/json",
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Authorization": "Basic SVRBQTQ5X0FQSV8yMDI1OkIxTmkwdDJRNXZMOUh4R2F4STVIMS1tMVRJRUN1WGczREQ1OWk2YUg="
+                'Accept': 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': 'Basic SVRBQTQ5X0FQSV8yMDI1OkIxTmkwdDJRNXZMOUh4R2F4STVIMS1tMVRJRUN1WGczREQ1OWk2YUg='
             }
 
-            # Empty body as in working Postman request
-            data = ""
+            payload = {}
 
-            self.logger.debug(f"Auth URL: {auth_url}")
-            self.logger.debug(f"Basic Auth: {self.afp_basic_auth}")
-            self.logger.debug(f"Username: {self.afp_username}")
-            self.logger.debug(f"Password: {self.afp_password}")
-            self.logger.debug(f"Headers: {headers}")
+            # Use requests module for authentication (exactly like test.py)
+            def authenticate_sync():
+                return requests.request("GET", auth_url, headers=headers, data=payload)
 
-            # Create a fresh session without default headers that might interfere
-            async with aiohttp.ClientSession() as session:
-                async with session.post(auth_url, headers=headers, data=data) as response:
-                    if response.status != 200:
-                        self.logger.error(f"Authentication failed with status {response.status}")
-                        response_text = await response.text()
-                        self.logger.error(f"Response: {response_text}")
-                        return False
+            # Run requests in thread pool (sync operation in async context)
+            response = await asyncio.to_thread(authenticate_sync)
 
-                    json_response = await response.json()
+            if response.status_code != 200:
+                self.logger.error(f"Authentication failed with status {response.status_code}")
+                self.logger.error(f"Response: {response.text}")
+                return False
 
-                    # Extract access token
-                    if "access_token" in json_response:
-                        self.access_token = json_response["access_token"]
-                        self.logger.info("Successfully authenticated with AFP API")
-                        return True
-                        self.logger.error(f"Access token not found in response: {json_response}")
-                        return False
+            json_response = response.json()
+
+            # Extract access token
+            if "access_token" in json_response:
+                self.access_token = json_response["access_token"]
+                return True
+            else:
+                self.logger.error(f"Access token not found in response: {json_response}")
+                return False
 
         except Exception as e:
             self.logger.error(f"Error authenticating with AFP API: {e}", exc_info=True)
@@ -169,7 +199,6 @@ class AFPPhotoWorker(BaseWorker):
                 }
             }
 
-            self.logger.info(f"Searching AFP photos for language: {lang}")
 
             async with session.post(search_url, headers=headers, json=body) as response:
                 if response.status != 200:
@@ -235,7 +264,6 @@ class AFPPhotoWorker(BaseWorker):
 
                 # Skip articles with urgency higher than 4 (only accept urgency 1-4)
                 if urgency and urgency > 5:
-                    self.logger.info(f"Skipping AFP photo with high urgency {urgency}: {photo_data.get('title', 'N/A')[:50]}...")
                     continue
 
                 # Handle category - may be string or list
@@ -267,7 +295,6 @@ class AFPPhotoWorker(BaseWorker):
 
                 photos.append(photo_data)
 
-            self.logger.info(f"Parsed {len(photos)} photos from search results")
             return photos
 
         except Exception as e:
@@ -291,7 +318,6 @@ class AFPPhotoWorker(BaseWorker):
             # Use urllib.request for downloading (similar to reuters_photos.py)
             import urllib.request
 
-            self.logger.debug(f"Downloading image from {url[:80]}...")
 
             def download_sync():
                 req = urllib.request.Request(
@@ -471,10 +497,6 @@ class AFPPhotoWorker(BaseWorker):
                 existing = result.scalar_one_or_none()
 
                 if existing:
-                    self.logger.debug(
-                        f"Article already exists in database: {article_data['guid']}",
-                        extra={"guid": article_data["guid"]}
-                    )
                     return False
 
                 normalized_category, raw_category = normalize_category(
@@ -498,8 +520,7 @@ class AFPPhotoWorker(BaseWorker):
                         else:
                             # Try ISO format
                             published_at = datetime.fromisoformat(published_at_str.replace("Z", "+00:00"))
-                    except Exception as e:
-                        self.logger.warning(f"Could not parse date: {article_data.get('published_at')}, error: {e}")
+                    except Exception:
                         published_at = datetime.utcnow()
 
                 if not published_at:
@@ -527,15 +548,6 @@ class AFPPhotoWorker(BaseWorker):
 
                 db.add(news)
                 await db.commit()
-
-                self.logger.info(
-                    f"Saved AFP photo: {article_data['title'][:50]}...",
-                    extra={
-                        "guid": article_data["guid"],
-                        "source": self.source_name,
-                        "category": normalized_category,
-                    }
-                )
                 return True
 
             except Exception as e:
@@ -632,34 +644,27 @@ class AFPPhotoWorker(BaseWorker):
                     # Search for photos in this language
                     search_response = await self._search_news(lang=lang, max_rows=50)
                     if not search_response:
-                        self.logger.warning(f"No search results for language: {lang}")
                         continue
 
-                    # Parse search results
                     photos = await self._parse_search_results(search_response)
                     if not photos:
-                        self.logger.warning(f"No photos parsed for language: {lang}")
                         continue
 
-                    self.logger.info(f"Found {len(photos)} photos for language: {lang}")
+                    total = len(photos)
+                    self.logger.info(f"Processing {total} photos...")
 
-                    # Process each photo
-                    for photo in photos:
+                    for i, photo in enumerate(photos, 1):
                         try:
                             guid = photo.get("guid")
                             if not guid:
                                 continue
 
-                            # Check if already exists
                             if await self._article_exists(guid):
-                                self.logger.debug(f"Photo already exists, skipping: {guid}")
                                 skipped_count += 1
                                 continue
 
-                            # Extract image URLs from medias
                             image_urls = self._extract_image_urls(photo.get("medias", []))
 
-                            # Download and upload preview image for news image_url
                             preview_s3_key = None
                             if image_urls.get("preview"):
                                 preview_data = await self._download_image(image_urls["preview"])
@@ -668,12 +673,7 @@ class AFPPhotoWorker(BaseWorker):
                                         preview_data,
                                         f"preview_{guid}.jpg"
                                     )
-                                    if preview_s3_key:
-                                        self.logger.info(f"Successfully uploaded preview image for {guid}")
-                                    else:
-                                        self.logger.warning(f"Failed to upload preview image to S3 for {guid}")
 
-                            # Download and upload high resolution image for body display
                             highres_s3_key = None
                             if image_urls.get("highres"):
                                 highres_data = await self._download_image(image_urls["highres"])
@@ -682,10 +682,6 @@ class AFPPhotoWorker(BaseWorker):
                                         highres_data,
                                         f"highres_{guid}.jpg"
                                     )
-                                    if highres_s3_key:
-                                        self.logger.info(f"Successfully uploaded high-res image for {guid}")
-                                    else:
-                                        self.logger.warning(f"Failed to upload high-res image to S3 for {guid}")
 
                             # Prepare article data
                             article_data = {
@@ -702,24 +698,21 @@ class AFPPhotoWorker(BaseWorker):
                                 "is_vertical": photo.get("is_vertical", False),
                             }
 
-                            # Save to database
                             if await self._save_article(article_data):
                                 saved_count += 1
+                                self.logger.info(f"Saved {saved_count}/{total}: {article_data.get('title', 'N/A')[:50]}")
 
                         except Exception as e:
                             self.logger.error(f"Error processing photo: {e}", exc_info=True)
                             continue
 
-                    # Small delay between languages
+                    self.logger.info(f"Processed {total} photos, saved {saved_count}, skipped {skipped_count}")
                     await asyncio.sleep(1)
 
                 except Exception as e:
                     self.logger.error(f"Error processing language {lang}: {e}", exc_info=True)
                     continue
 
-            self.logger.info(
-                f"Finished fetching photos from {self.source_name}: {saved_count} new photos saved, {skipped_count} photos skipped"
-            )
 
         except Exception as e:
             self.logger.error(f"Error in fetch_news: {e}", exc_info=True)

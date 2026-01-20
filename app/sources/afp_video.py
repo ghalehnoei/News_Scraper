@@ -14,12 +14,15 @@ import os
 import urllib.request
 
 import aiohttp
-import os
+import requests
+from urllib.parse import quote_plus
 from sqlalchemy import select
 from dotenv import load_dotenv
+import yt_dlp
 
 # Load environment variables from .env file
-load_dotenv()
+# Ensure .env values override any existing process env vars
+load_dotenv(override=True)
 
 from app.core.config import settings
 from app.core.logging import setup_logging
@@ -39,11 +42,33 @@ class AFPVideoWorker(BaseWorker):
     def __init__(self):
         """Initialize AFP video worker."""
         super().__init__(source_name="afp_video")
-        self.afp_username = os.getenv("AFP_USERNAME", "ghasemzade@gmail.com")
-        self.afp_password = os.getenv("AFP_PASSWORD", "1234@Qwe")
-        self.afp_basic_auth = os.getenv(
-            "AFP_BASIC_AUTH",
-            "SVRBQTQ5X0FQSV8yMDI1OkIxTmkwdDJRNXZMOUh4R2F4STVIMS1tMVRJREN1WGczREQ1OWk2YUg="
+        # Load sensitive credentials from environment variables (no defaults)
+        def _clean_env(value: Optional[str]) -> Optional[str]:
+            if value is None:
+                return None
+            cleaned = value.strip()
+            if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in ("'", '"'):
+                cleaned = cleaned[1:-1].strip()
+            return cleaned or None
+
+        self.afp_username = _clean_env(os.getenv("AFP_USERNAME"))
+        self.afp_password = _clean_env(os.getenv("AFP_PASSWORD"))
+        self.afp_basic_auth = _clean_env(os.getenv("AFP_BASIC_AUTH"))
+        if self.afp_basic_auth and self.afp_basic_auth.lower().startswith("basic "):
+            self.afp_basic_auth = self.afp_basic_auth.split(" ", 1)[1].strip()
+        # Log presence and masked values only (never log secrets)
+        def _mask(value: Optional[str]) -> str:
+            if not value:
+                return "missing"
+            if len(value) <= 6:
+                return "***"
+            return f"{value[:2]}***{value[-2:]}"
+
+        self.logger.info(
+            "AFP env loaded (masked): AFP_USERNAME=%s, AFP_PASSWORD=%s, AFP_BASIC_AUTH=%s",
+            _mask(self.afp_username),
+            _mask(self.afp_password),
+            _mask(self.afp_basic_auth),
         )
         self.access_token = None
         self.http_session: Optional[aiohttp.ClientSession] = None
@@ -76,43 +101,55 @@ class AFPVideoWorker(BaseWorker):
                 request_type="api"
             )
 
-            self.logger.info(
-                "Authenticating with AFP video API...",
-                extra={"source": self.source_name}
+
+            # Build auth URL and headers from environment variables
+            if not self.afp_username or not self.afp_password:
+                self.logger.error("AFP credentials not set in environment (AFP_USERNAME/AFP_PASSWORD).")
+                return False
+
+            if not self.afp_basic_auth:
+                self.logger.error("AFP_BASIC_AUTH not set in environment. This is required for client authentication.")
+                return False
+
+            # Build auth URL exactly like test.py
+            auth_url = (
+                f"https://afp-apicore-prod.afp.com/oauth/token"
+                f"?username={self.afp_username}"
+                f"&password={self.afp_password}"
+                f"&grant_type=password"
             )
 
-            # Use exact same URL as working Postman request
-            auth_url = "https://afp-apicore-prod.afp.com/oauth/token?grant_type=password&username=ghasemzade%40gmail.com&password=1234%40Qwe"
-
-            # Exact same headers as working Postman request
+            # Build headers exactly like test.py
             headers = {
-                "Accept": "application/json",
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Authorization": "Basic SVRBQTQ5X0FQSV8yMDI1OkIxTmkwdDJRNXZMOUh4R2F4STVIMS1tMVRJRUN1WGczREQ1OWk2YUg="
+                'Accept': 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': 'Basic SVRBQTQ5X0FQSV8yMDI1OkIxTmkwdDJRNXZMOUh4R2F4STVIMS1tMVRJRUN1WGczREQ1OWk2YUg='
             }
 
-            # Empty body as in working Postman request
-            data = ""
+            payload = {}
 
-            # Create a fresh session without default headers that might interfere
-            async with aiohttp.ClientSession() as session:
-                async with session.post(auth_url, headers=headers, data=data) as response:
-                    if response.status != 200:
-                        self.logger.error(f"Authentication failed with status {response.status}")
-                        response_text = await response.text()
-                        self.logger.error(f"Response: {response_text}")
-                        return False
+            # Use requests module for authentication (exactly like test.py)
+            def authenticate_sync():
+              
+                return requests.request("GET", auth_url, headers=headers, data=payload)
 
-                    json_response = await response.json()
+            # Run requests in thread pool (sync operation in async context)
+            response = await asyncio.to_thread(authenticate_sync)
 
-                    # Extract access token
-                    if "access_token" in json_response:
-                        self.access_token = json_response["access_token"]
-                        self.logger.info("Successfully authenticated with AFP video API")
-                        return True
-                    else:
-                        self.logger.error(f"Access token not found in response: {json_response}")
-                        return False
+            if response.status_code != 200:
+                self.logger.error(f"Authentication failed with status {response.status_code}")
+                self.logger.error(f"Response: {response.text}")
+                return False
+
+            json_response = response.json()
+
+            # Extract access token
+            if "access_token" in json_response:
+                self.access_token = json_response["access_token"]
+                return True
+            else:
+                self.logger.error(f"Access token not found in response: {json_response}")
+                return False
 
         except Exception as e:
             self.logger.error(f"Error authenticating with AFP video API: {e}", exc_info=True)
@@ -164,7 +201,6 @@ class AFPVideoWorker(BaseWorker):
                 }
             }
 
-            self.logger.info(f"Searching AFP videos for language: {lang}")
 
             async with session.post(search_url, headers=headers, json=body) as response:
                 if response.status != 200:
@@ -174,7 +210,6 @@ class AFPVideoWorker(BaseWorker):
                     return None
 
                 json_response = await response.json()
-                self.logger.info(f"AFP video search successful, found videos")
                 return json_response
 
         except Exception as e:
@@ -198,7 +233,6 @@ class AFPVideoWorker(BaseWorker):
             if not documents:
                 documents = search_response.get("results", [])
 
-            self.logger.info(f"Processing {len(documents)} AFP video search results")
 
             for doc in documents:
 
@@ -230,7 +264,6 @@ class AFPVideoWorker(BaseWorker):
 
                 # Skip if no video URL
                 if not video_data.get("video_url"):
-                    self.logger.info(f"Skipping AFP video without video URL: {video_data.get('title', 'N/A')[:50]}...")
                     continue
 
                 # Handle category
@@ -244,7 +277,6 @@ class AFPVideoWorker(BaseWorker):
                 urgency = doc.get("urgency")
                 video_data["priority"] = urgency or 3
                 if urgency and urgency > 5:
-                    self.logger.info(f"Skipping AFP video with high urgency {urgency}: {video_data.get('title', 'N/A')[:50]}...")
                     continue
 
                 # DON'T extract summary for AFP video (unlike AFP photo)
@@ -288,15 +320,11 @@ class AFPVideoWorker(BaseWorker):
                 if rendition_type == "rnd:preview" and role == "Preview":
                     if "href" in media:
                         urls["preview"] = media["href"]
-                        self.logger.info(f"Found preview image URL: {media['href']}")
 
                 # Video file for video_url
                 if rendition_type == "afpveprnd:VID_MP4_H264_1920x1080i25_T":
                     if "href" in media:
                         urls["video"] = media["href"]
-                        self.logger.info(f"Found video URL: {media['href']}")
-
-            self.logger.info(f"Extracted URLs - Preview: {'YES' if 'preview' in urls else 'NO'}, Video: {'YES' if 'video' in urls else 'NO'}")
 
 
         except Exception as e:
@@ -317,9 +345,22 @@ class AFPVideoWorker(BaseWorker):
             self.logger.error(f"Error checking image orientation: {e}", exc_info=True)
         return False
 
+    async def _article_exists(self, guid: str) -> bool:
+        """Check if article already exists in database by GUID."""
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(News).where(News.url == f"afp:{guid}")
+                )
+                exists = result.scalar_one_or_none() is not None
+                return exists
+        except Exception as e:
+            self.logger.error(f"Error checking article existence: {e}", exc_info=True)
+            return False
+
     async def _download_image(self, url: str) -> Optional[bytes]:
-        """Download image/video from URL."""
-        temp_file = None
+        """Download image from URL."""
+        temp_path = None
         try:
             await self.rate_limiter.acquire(
                 source=self.source_name,
@@ -331,10 +372,8 @@ class AFPVideoWorker(BaseWorker):
             temp_path = temp_file.name
             temp_file.close()
 
-            # Use urllib.request for downloading (similar to reuters_photos.py)
+            # Use urllib.request for downloading images (similar to reuters_photos.py)
             import urllib.request
-
-            self.logger.debug(f"Downloading media from {url[:80]}...")
 
             def download_sync():
                 req = urllib.request.Request(
@@ -356,8 +395,8 @@ class AFPVideoWorker(BaseWorker):
             with open(temp_path, 'rb') as f:
                 content = f.read()
 
-            self.logger.info(
-                f"Successfully downloaded media: {len(content)} bytes",
+            self.logger.debug(
+                f"Downloaded image: {len(content)} bytes",
                 extra={
                     "url": url[:60],
                     "size_mb": f"{len(content)/1024/1024:.2f}"
@@ -368,18 +407,120 @@ class AFPVideoWorker(BaseWorker):
 
         except Exception as e:
             self.logger.error(
-                f"Error downloading media: {e}",
+                f"Error downloading image: {e}",
                 extra={"url": url[:80]},
                 exc_info=True
             )
             return None
         finally:
             # Clean up temporary file
-            if temp_file and os.path.exists(temp_path):
+            if temp_path and os.path.exists(temp_path):
                 try:
                     os.unlink(temp_path)
                 except Exception:
                     pass
+
+    def _progress_hook(self, d: Dict[str, Any]) -> None:
+        """Progress hook for yt-dlp downloads."""
+        if d.get('status') == 'downloading':
+            total = d.get('total_bytes') or d.get('total_bytes_estimate')
+            downloaded = d.get('downloaded_bytes', 0)
+            if total:
+                percent = (downloaded / total) * 100
+                speed = d.get('speed', 0)
+                speed_mb = speed / (1024 * 1024) if speed else 0
+                self.logger.info(
+                    f"Download progress: {percent:.1f}% ({downloaded // 1024 // 1024} MB / {total // 1024 // 1024} MB) - {speed_mb:.2f} MB/s"
+                )
+            else:
+                downloaded_mb = downloaded // 1024 // 1024
+                self.logger.info(f"Downloading... {downloaded_mb} MB downloaded")
+        elif d.get('status') == 'finished':
+            self.logger.info(f"Download finished: {d.get('filename', 'unknown')}")
+
+    async def _download_video(self, url: str) -> Optional[bytes]:
+        """Download video using yt-dlp (similar to reuters method)."""
+        temp_path = None
+        temp_dir = None
+        try:
+            await self.rate_limiter.acquire(
+                source=self.source_name,
+                request_type="video"
+            )
+            
+            self.logger.info(f"Downloading video from {url[:80]}...")
+            self.logger.debug(f"Full video URL: {url[:200]}")
+            
+            # Create temporary directory for yt-dlp output
+            temp_dir = tempfile.mkdtemp()
+            temp_filename = os.path.join(temp_dir, 'video.%(ext)s')
+            
+            # Configure yt-dlp options
+            ydl_opts = {
+                'outtmpl': temp_filename,
+                'quiet': True,
+                'no_warnings': False,
+                'progress_hooks': [self._progress_hook],
+                'format': 'best',
+            }
+            
+            # Download using yt-dlp in thread pool (yt-dlp is synchronous)
+            def download_sync():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
+            
+            await asyncio.to_thread(download_sync)
+            
+            # Find the downloaded file (yt-dlp may add extension)
+            downloaded_files = [f for f in os.listdir(temp_dir) if f.startswith('video.')]
+            if not downloaded_files:
+                self.logger.error(f"No video file found in temp directory: {temp_dir}")
+                return None
+            
+            # Use the first matching file
+            downloaded_file = os.path.join(temp_dir, downloaded_files[0])
+            temp_path = downloaded_file
+            
+            # Read the downloaded file
+            with open(temp_path, 'rb') as f:
+                video_data = f.read()
+            
+            self.logger.info(
+                f"Successfully downloaded video: {len(video_data)} bytes ({len(video_data)/1024/1024:.2f} MB)",
+                extra={
+                    "url": url[:60],
+                    "size_mb": f"{len(video_data)/1024/1024:.2f}"
+                }
+            )
+            
+            return video_data
+                
+        except Exception as e:
+            self.logger.error(
+                f"Error downloading video: {e}",
+                extra={"url": url[:80]},
+                exc_info=True
+            )
+            return None
+        finally:
+            # Clean up temporary files and directory
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                except Exception as e:
+                    self.logger.warning(f"Failed to delete temp file {temp_path}: {e}")
+            
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    # Remove any remaining files in temp directory
+                    for f in os.listdir(temp_dir):
+                        try:
+                            os.unlink(os.path.join(temp_dir, f))
+                        except:
+                            pass
+                    os.rmdir(temp_dir)
+                except Exception as e:
+                    self.logger.warning(f"Failed to delete temp directory {temp_dir}: {e}")
 
     async def _upload_image_to_s3(self, image_data: bytes, filename: str) -> Optional[str]:
         """Upload image to S3."""
@@ -491,73 +632,44 @@ class AFPVideoWorker(BaseWorker):
     async def _save_article(self, article_data: Dict[str, Any]) -> bool:
         """Save article to database."""
         try:
-            self.logger.info(
-                f"Starting to save AFP video article: {article_data.get('title', 'N/A')[:50]}...",
-                extra={"guid": article_data.get("guid", "N/A")}
-            )
-
             async with AsyncSessionLocal() as db:
-                # Use GUID as unique URL identifier
                 url = f"afp:{article_data['guid']}"
-                self.logger.debug(f"Generated URL: {url}")
-
-                # Check if article already exists
-                self.logger.debug("Checking for existing article...")
+                
                 result = await db.execute(
                     select(News).where(News.url == url)
                 )
                 existing = result.scalar_one_or_none()
 
                 if existing:
-                    self.logger.info(
-                        f"Article already exists in database: {article_data['guid']}",
-                        extra={"guid": article_data["guid"], "existing_id": existing.id}
-                    )
                     return False
 
-                self.logger.debug("Article does not exist, proceeding with save...")
-
-                # Normalize category
                 raw_category = article_data.get("category", "")
-                self.logger.debug(f"Raw category: '{raw_category}'")
                 normalized_category, preserved_raw = normalize_category(self.source_name, raw_category)
-                self.logger.debug(f"Normalized category: '{normalized_category}', preserved raw: '{preserved_raw}'")
 
-                # Truncate raw_category if too long
                 if len(preserved_raw) > 197:
                     preserved_raw = preserved_raw[:197] + "..."
-                    self.logger.debug(f"Truncated raw_category to fit database limit: {len(preserved_raw)} chars")
 
-                # Parse published date
                 published_at = None
                 if article_data.get("published_at"):
                     try:
                         published_at_str = article_data["published_at"]
-                        self.logger.debug(f"Parsing published date: '{published_at_str}'")
                         if published_at_str.endswith("Z"):
                             published_at = datetime.fromisoformat(published_at_str.replace("Z", "+00:00"))
                         else:
                             published_at = datetime.fromisoformat(published_at_str)
-                        self.logger.debug(f"Parsed date: {published_at}")
-                    except Exception as e:
-                        self.logger.warning(f"Could not parse date: {article_data.get('published_at')}, error: {e}")
+                    except Exception:
                         published_at = datetime.utcnow()
 
                 if not published_at:
                     published_at = datetime.utcnow()
-                    self.logger.debug("Using current UTC time as published date")
 
-                # Build body HTML with embedded video
-                self.logger.debug("Building body HTML...")
                 body_html = self._build_body_html(article_data)
-                self.logger.debug(f"Body HTML length: {len(body_html)} characters")
 
-                self.logger.debug("Creating News object...")
                 news_article = News(
                     source=self.source_name,
                     title=article_data["title"],
                     body_html=body_html,
-                    summary="",  # No summary for AFP video
+                    summary="",
                     url=url,
                     published_at=published_at.isoformat() if hasattr(published_at, 'isoformat') else str(published_at),
                     image_url=article_data.get("image_url", ""),
@@ -567,28 +679,12 @@ class AFPVideoWorker(BaseWorker):
                     raw_category=preserved_raw,
                     language=article_data.get("language", "en"),
                     priority=article_data.get("priority", 3),
-                    is_international=True,  # AFP is an international source
+                    is_international=True,
                     source_type='external',
                 )
 
-                self.logger.debug(f"News object created - Title: '{news_article.title[:30]}...', URL: '{news_article.url}', Image: {bool(news_article.image_url)}, Video: {bool(news_article.video_url)}")
-
-                self.logger.debug("Adding article to database...")
                 db.add(news_article)
-
-                self.logger.debug("Committing transaction...")
                 await db.commit()
-
-                self.logger.info(
-                    f"✅ Successfully saved AFP video article: {article_data['title'][:50]}...",
-                    extra={
-                        "guid": article_data["guid"],
-                        "title": article_data["title"][:30],
-                        "has_image": bool(article_data.get("image_url")),
-                        "has_video": bool(article_data.get("video_url")),
-                        "category": normalized_category
-                    }
-                )
                 return True
 
         except Exception as e:
@@ -598,53 +694,50 @@ class AFPVideoWorker(BaseWorker):
     async def process_articles(self, articles: List[Dict[str, Any]]) -> None:
         """Process and save video articles."""
         saved_count = 0
+        total = len(articles)
 
         try:
-            self.logger.info(f"Processing {len(articles)} AFP video articles...")
+            if total > 0:
+                self.logger.info(f"Processing {total} video articles...")
+            
             for i, article_data in enumerate(articles, 1):
                 try:
-                    self.logger.info(
-                        f"[{i}/{len(articles)}] Processing article: {article_data.get('title', 'N/A')[:40]}...",
-                        extra={"guid": article_data.get("guid", "N/A")}
-                    )
+                    guid = article_data.get("guid")
+                    if not guid:
+                        continue
 
-                    # Download and upload preview image
+                    if await self._article_exists(guid):
+                        self.logger.debug(f"Video already exists, skipping: {guid}")
+                        continue
+
+                    self.logger.info(f"[{i}/{total}] Processing: {article_data.get('title', 'N/A')[:50]}")
+
                     image_url = None
                     if article_data.get("image_url"):
-                        self.logger.info(f"📷 Downloading preview image...")
+                        self.logger.debug(f"Downloading preview image for {guid}")
                         image_content = await self._download_image(article_data["image_url"])
                         if image_content:
-                            self.logger.info(f"📤 Uploading image to S3 ({len(image_content)} bytes)...")
                             filename = f"preview_{article_data['guid']}.jpg"
                             image_url = await self._upload_image_to_s3(image_content, filename)
                             if image_url:
-                                self.logger.info(f"✅ Image uploaded: {image_url}")
-                            else:
-                                self.logger.error("❌ Image upload failed")
+                                self.logger.debug(f"Preview image uploaded: {filename}")
                         else:
-                            self.logger.warning("❌ Image download failed")
-                    else:
-                        self.logger.debug("No preview image URL found, skipping image download")
+                            self.logger.warning(f"Failed to download preview image for {guid}")
 
-                    # Download and upload video
                     video_url = None
                     if article_data.get("video_url"):
-                        self.logger.info(f"🎥 Downloading video...")
-                        video_content = await self._download_image(article_data["video_url"])
+                        self.logger.debug(f"Downloading video for {guid}")
+                        video_content = await self._download_video(article_data["video_url"])
                         if video_content:
-                            self.logger.info(f"📤 Uploading video to S3 ({len(video_content)} bytes)...")
                             filename = f"video_{article_data['guid']}.mp4"
                             video_url = await self._upload_image_to_s3(video_content, filename)
                             if video_url:
-                                self.logger.info(f"✅ Video uploaded: {video_url}")
-                            else:
-                                self.logger.error("❌ Video upload failed")
+                                self.logger.debug(f"Video uploaded: {filename}")
                         else:
-                            self.logger.warning("❌ Video download failed")
+                            self.logger.warning(f"Failed to download video for {guid}")
                     else:
-                        self.logger.warning("❌ No video URL found!")
+                        self.logger.warning(f"No video URL found for {guid}")
 
-                    # Prepare article data
                     processed_data = {
                         **article_data,
                         "image_url": image_url,
@@ -652,16 +745,12 @@ class AFPVideoWorker(BaseWorker):
                         "is_vertical": article_data.get("is_vertical", False),
                     }
 
-                    self.logger.info(f"💾 Saving article to database...")
-                    # Save article
-                    saved = await self._save_article(processed_data)
-                    if saved:
+                    if await self._save_article(processed_data):
                         saved_count += 1
-                        self.logger.info(f"✅ Article saved successfully ({saved_count}/{i})")
+                        self.logger.info(f"Saved {saved_count}/{total}: {article_data.get('title', 'N/A')[:50]}")
                     else:
-                        self.logger.warning(f"⚠️ Article save skipped (already exists or error)")
+                        self.logger.warning(f"Failed to save article: {guid}")
 
-                    # Rate limiting
                     await asyncio.sleep(1)
 
                 except Exception as e:
@@ -671,54 +760,42 @@ class AFPVideoWorker(BaseWorker):
         except Exception as e:
             self.logger.error(f"Error in process_articles: {e}", exc_info=True)
         finally:
+            if total > 0:
+                self.logger.info(f"Processed {total} videos, saved {saved_count}")
             await self.close()
 
     async def fetch_news(self) -> None:
         """Main method to fetch and process AFP video news."""
         try:
-            self.logger.info(f"🚀 Starting to fetch videos from {self.source_name}")
+            self.logger.info(f"Starting to fetch videos from {self.source_name}")
 
-            # Authenticate
-            self.logger.info("🔐 Authenticating with AFP API...")
             if not await self._authenticate():
-                self.logger.error("❌ Authentication failed, aborting video fetch")
+                self.logger.error("Authentication failed")
                 return
-            self.logger.info("✅ Authentication successful")
 
-            saved_count = 0
-            languages = ['en']  # Focus on English for now
+            self.logger.info("Authentication successful")
 
+            languages = ["en", "ar", "fr", "es"]
             for lang in languages:
                 try:
-                    self.logger.info(f"🔍 Searching for videos in language: {lang}")
-
-                    # Search for videos
+                    self.logger.info(f"Searching for videos (language: {lang})")
                     search_result = await self._search_news(lang=lang, max_rows=50)
                     if not search_result:
-                        self.logger.warning(f"⚠️ Search failed for language {lang}")
+                        self.logger.warning(f"No search results for language: {lang}")
                         continue
 
-                    self.logger.info(f"📋 Search completed, parsing results...")
-
-                    # Parse results
                     videos = await self._parse_search_results(search_result)
                     if not videos:
-                        self.logger.warning(f"⚠️ No videos found for language {lang}")
+                        self.logger.warning(f"No videos parsed for language: {lang}")
                         continue
 
-                    self.logger.info(f"📹 Found {len(videos)} videos, processing...")
-
-                    # Process articles
+                    self.logger.info(f"Found {len(videos)} videos for language: {lang}")
                     await self.process_articles(videos)
-
-                    # Small delay between languages
                     await asyncio.sleep(1)
 
                 except Exception as e:
-                    self.logger.error(f"❌ Error processing language {lang}: {e}", exc_info=True)
+                    self.logger.error(f"Error processing language {lang}: {e}", exc_info=True)
                     continue
-
-            self.logger.info(f"🎉 Finished fetching videos from {self.source_name}: {saved_count} videos processed")
 
         except Exception as e:
             self.logger.error(f"Error in fetch_news: {e}", exc_info=True)

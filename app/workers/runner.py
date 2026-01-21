@@ -33,6 +33,7 @@ from app.sources.reuters_video import ReutersVideoWorker
 from app.sources.afp_text import AFPTextWorker
 from app.sources.afp_photo import AFPPhotoWorker
 from app.sources.afp_video import AFPVideoWorker
+from app.sources.aptn_text import APTextWorker
 
 
 async def main() -> None:
@@ -95,6 +96,8 @@ async def main() -> None:
         worker = AFPPhotoWorker()
     elif settings.worker_source == "afp_video":
         worker = AFPVideoWorker()
+    elif settings.worker_source == "aptn_text":
+        worker = APTextWorker()
     else:
         # Fallback to base worker for unknown sources
         worker = BaseWorker(settings.worker_source)

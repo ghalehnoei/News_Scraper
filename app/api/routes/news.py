@@ -173,6 +173,7 @@ SOURCE_NAMES = {
     "afp_text": "فرانس‌پرس متن",
     "afp_video": "فرانس‌پرس ویدئو",
     "afp_photo": "فرانس‌پرس عکس",
+    "aptn_text": "AP متن",
 }
 
 # Color codes for sources (used in API responses)
@@ -202,6 +203,7 @@ SOURCE_COLORS = {
     "afp_text": "#1f77b4", # آبی فرانسه
     "afp_video": "#ff7f0e", # نارنجی برای ویدیو
     "afp_photo": "#2ca02c", # سبز برای عکس
+    "aptn_text": "#8B4513", # قهوه‌ای برای AP
 }
 
 
@@ -845,6 +847,11 @@ async def get_news_by_id(
     # Determine text direction for title (LTR for Reuters, RTL for Persian sources)
     is_ltr = article.source in ["reuters_photos", "reuters_text", "reuters_video"]
     
+    # Determine if article is translated (international source with Persian language)
+    is_international = getattr(article, 'is_international', False)
+    language = getattr(article, 'language', 'en')
+    is_translated = is_international and language == 'fa'
+    
     return {
         "id": str(article.id),
         "source": article.source,
@@ -861,6 +868,8 @@ async def get_news_by_id(
         "category": article.category,
         "raw_category": article.raw_category,  # Original category for display
         "is_ltr": is_ltr,  # Text direction flag for title
-        "language": getattr(article, 'language', 'en'),  # Language code
+        "language": language,  # Language code
+        "is_international": is_international,  # International source flag
+        "is_translated": is_translated,  # Translated news flag (international + Persian)
     }
 

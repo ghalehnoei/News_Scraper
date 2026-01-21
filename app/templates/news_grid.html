@@ -227,7 +227,7 @@ async function openNewsModal(newsId) {
         // Render article content
         modalBody.innerHTML = `
             <div class="modal-news-header">
-                <h1 class="modal-news-title" dir="${article.language == 'ar' || article.language == 'fa' ? 'rtl' : 'ltr'}" style="text-align: ${article.language == 'ar' || article.language == 'fa' ? 'right' : 'left'};${article.is_breaking ? ' color: #e74c3c; font-weight: bold;' : ''}${article.language == 'ar' || article.language == 'fa' ? ' font-family: \'Vazir\', \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif; font-weight: 600;' : ''}">${highlightedTitle}</h1>
+                <h1 id="modalNewsTitle" class="modal-news-title" dir="${article.language == 'ar' || article.language == 'fa' ? 'rtl' : 'ltr'}" style="text-align: ${article.language == 'ar' || article.language == 'fa' ? 'right' : 'left'};${article.is_breaking ? ' color: #e74c3c; font-weight: bold;' : ''}${article.language == 'ar' || article.language == 'fa' ? ' font-family: \'Vazir\', \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif; font-weight: 600;' : ''}">${highlightedTitle}</h1>
                 <div class="modal-news-meta">
                     <span class="news-source">${escapeHtml(article.source_persian || article.source)}</span>
                     ${article.published_at ? `<span class="news-date">${formatPersianDate(article.published_at)}</span>` : ''}
@@ -235,19 +235,29 @@ async function openNewsModal(newsId) {
                 </div>
             </div>
             ${highlightedSummary ? `
-                <div class="modal-news-summary">
+                <div id="modalNewsSummary" class="modal-news-summary">
                     <p>${highlightedSummary}</p>
                 </div>
             ` : ''}
             ${highlightedBody ? `
-                <div class="modal-news-body" dir="${article.language == 'ar' || article.language == 'fa' ? 'rtl' : 'ltr'}" style="${article.language == 'ar' || article.language == 'fa' ? 'font-family: \'Vazir\', \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif;' : ''}">
+                <div class="modal-news-content-controls">
+                    <button id="toggleRtlBtn" class="rtl-toggle-btn" onclick="toggleRtlAlignment()" title="تغییر تراز متن">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3 3H15M3 9H15M3 15H12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        <span>راست‌چین</span>
+                    </button>
+                </div>
+                <div id="modalNewsBody" class="modal-news-body" dir="${article.language == 'ar' || article.language == 'fa' ? 'rtl' : 'ltr'}" style="text-align: ${article.language == 'ar' || article.language == 'fa' ? 'right' : 'left'};${article.language == 'ar' || article.language == 'fa' ? ' font-family: \'Vazir\', \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif;' : ''}">
                     ${highlightedBody}
                 </div>
             ` : ''}
             <div class="modal-news-footer">
+                ${article.url ? `
                 <a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer" class="original-link">
                     مشاهده خبر اصلی →
                 </a>
+                ` : ''}
             </div>
         `;
     } catch (error) {
@@ -256,6 +266,69 @@ async function openNewsModal(newsId) {
                 <p>خطا در بارگذاری خبر: ${escapeHtml(error.message)}</p>
             </div>
         `;
+    }
+}
+
+// Toggle RTL alignment for modal content
+function toggleRtlAlignment() {
+    const modalBody = document.getElementById('modalNewsBody');
+    const modalTitle = document.getElementById('modalNewsTitle');
+    const modalSummary = document.getElementById('modalNewsSummary');
+    const toggleBtn = document.getElementById('toggleRtlBtn');
+    const btnSpan = toggleBtn ? toggleBtn.querySelector('span') : null;
+    
+    if (!modalBody && !modalTitle) return;
+    
+    // Toggle body
+    if (modalBody) {
+        const currentDir = modalBody.getAttribute('dir') || 'ltr';
+        const newDir = currentDir === 'rtl' ? 'ltr' : 'rtl';
+        const newAlign = newDir === 'rtl' ? 'right' : 'left';
+        
+        modalBody.setAttribute('dir', newDir);
+        modalBody.style.textAlign = newAlign;
+        if (newDir === 'rtl') {
+            modalBody.style.fontFamily = "'Vazir', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+        } else {
+            modalBody.style.fontFamily = '';
+        }
+    }
+    
+    // Toggle title
+    if (modalTitle) {
+        const currentDir = modalTitle.getAttribute('dir') || 'ltr';
+        const newDir = currentDir === 'rtl' ? 'ltr' : 'rtl';
+        const newAlign = newDir === 'rtl' ? 'right' : 'left';
+        
+        modalTitle.setAttribute('dir', newDir);
+        modalTitle.style.textAlign = newAlign;
+        if (newDir === 'rtl') {
+            modalTitle.style.fontFamily = "'Vazir', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+            modalTitle.style.fontWeight = '600';
+        } else {
+            modalTitle.style.fontFamily = '';
+            modalTitle.style.fontWeight = '';
+        }
+    }
+    
+    // Toggle summary if exists
+    if (modalSummary) {
+        const currentDir = modalSummary.getAttribute('dir') || 'ltr';
+        const newDir = currentDir === 'rtl' ? 'ltr' : 'rtl';
+        const newAlign = newDir === 'rtl' ? 'right' : 'left';
+        
+        modalSummary.setAttribute('dir', newDir);
+        modalSummary.style.textAlign = newAlign;
+        if (newDir === 'rtl') {
+            modalSummary.style.fontFamily = "'Vazir', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+        } else {
+            modalSummary.style.fontFamily = '';
+        }
+    }
+    
+    // Update button text
+    if (btnSpan) {
+        btnSpan.textContent = modalBody && modalBody.getAttribute('dir') === 'rtl' ? 'چپ‌چین' : 'راست‌چین';
     }
 }
 
@@ -628,9 +701,10 @@ const sourceNames = {
     "reuters_photos": "رویترز عکس",
     "reuters_text": "رویترز متن",
     "reuters_video": "رویترز ویدئو",
-    "afp_text": "فرانس‌پرس متن",
-    "afp_video": "فرانس‌پرس ویدئو",
-    "afp_photo": "فرانس‌پرس عکس"
+        "afp_text": "فرانس‌پرس متن",
+        "afp_video": "فرانس‌پرس ویدئو",
+        "afp_photo": "فرانس‌پرس عکس",
+        "aptn_text": "AP متن"
 };
 
 // Source colors mapping

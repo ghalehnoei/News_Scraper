@@ -172,6 +172,7 @@ SOURCE_NAMES = {
     "afp_text": "فرانس‌پرس متن",
     "afp_video": "فرانس‌پرس ویدئو",
     "afp_photo": "فرانس‌پرس عکس",
+    "aptn_text": "AP متن",
 }
 
 
@@ -218,6 +219,7 @@ SOURCE_COLORS = {
     "afp_text": "#1f77b4", # آبی فرانسه
     "afp_video": "#ff7f0e", # نارنجی برای ویدیو
     "afp_photo": "#2ca02c", # سبز برای عکس
+    "aptn_text": "#8B4513", # قهوه‌ای برای AP
 }
 
 # Persian names for normalized categories
@@ -517,6 +519,11 @@ async def news_grid(
             is_ltr = False  # Persian sources are RTL
             is_breaking = False
         
+        # Determine if article is translated (international source with Persian language)
+        is_international = getattr(article, 'is_international', False)
+        language = getattr(article, 'language', 'en')
+        is_translated = is_international and language == 'fa'
+        
         articles_data.append({
             "id": str(article.id),
             "title": article.title,
@@ -533,8 +540,10 @@ async def news_grid(
             "raw_category": article.raw_category,  # Original category for reference
             "is_ltr": is_ltr,  # Text direction flag for title
             "is_breaking": is_breaking,  # Breaking news flag
-            "language": getattr(article, 'language', 'en'),  # Language code
+            "language": language,  # Language code
             "priority": getattr(article, 'priority', 5),  # Reuters priority level (1-5)
+            "is_international": is_international,  # International source flag
+            "is_translated": is_translated,  # Translated news flag (international + Persian)
         })
 
     # Calculate pagination info
@@ -897,6 +906,11 @@ async def news_detail(
         is_ltr = False  # Persian sources are RTL
         is_breaking = False
     
+    # Determine if article is translated (international source with Persian language)
+    is_international = getattr(article, 'is_international', False)
+    language_detail = getattr(article, 'language', 'en')
+    is_translated = is_international and language_detail == 'fa'
+    
     article_data = {
         "id": str(article.id),
         "title": article.title,
@@ -909,8 +923,10 @@ async def news_detail(
         "url": article.url,
         "is_ltr": is_ltr,  # Text direction flag for title
         "is_breaking": is_breaking,  # Breaking news flag
-        "language": getattr(article, 'language', 'en'),  # Language code
+        "language": language_detail,  # Language code
         "priority": getattr(article, 'priority', 5),  # Reuters priority level (1-5)
+        "is_international": is_international,  # International source flag
+        "is_translated": is_translated,  # Translated news flag (international + Persian)
     }
 
     template = templates.get_template("news_detail.html")

@@ -173,6 +173,8 @@ SOURCE_NAMES = {
     "afp_video": "فرانس‌پرس ویدئو",
     "afp_photo": "فرانس‌پرس عکس",
     "aptn_text": "AP متن",
+    "aptn_video": "AP ویدئو",
+    "aptn_photo": "AP عکس",
 }
 
 
@@ -220,6 +222,8 @@ SOURCE_COLORS = {
     "afp_video": "#ff7f0e", # نارنجی برای ویدیو
     "afp_photo": "#2ca02c", # سبز برای عکس
     "aptn_text": "#8B4513", # قهوه‌ای برای AP
+    "aptn_video": "#8B4513", # قهوه‌ای برای AP (همان رنگ متن)
+    "aptn_photo": "#8B4513", # قهوه‌ای برای AP (همان رنگ متن و ویدیو)
 }
 
 # Persian names for normalized categories

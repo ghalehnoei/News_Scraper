@@ -9,6 +9,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-news_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-news_db}"]
       interval: 10s
@@ -652,6 +654,87 @@ services:
     networks:
       news_network:
         ipv4_address: 10.20.10.55
+
+  worker-afp-text:
+    image: ghcr.io/ghalehnoei/news-scraper/worker:latest
+    environment:
+      WORKER_SOURCE: afp_text
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-news_db}}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_BUCKET: ${S3_BUCKET:-news-images}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_USE_SSL: ${S3_USE_SSL:-false}
+      S3_VERIFY_SSL: ${S3_VERIFY_SSL:-true}
+      POLL_INTERVAL: ${POLL_INTERVAL:-300}
+      MAX_REQUESTS_PER_MINUTE: ${MAX_REQUESTS_PER_MINUTE:-30}
+      DELAY_BETWEEN_REQUESTS: ${DELAY_BETWEEN_REQUESTS:-2.0}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      AFP_USERNAME: ${AFP_USERNAME}
+      AFP_PASSWORD: ${AFP_PASSWORD}
+      AFP_BASIC_AUTH: ${AFP_BASIC_AUTH}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      news_network:
+        ipv4_address: 10.20.10.56
+
+  worker-afp-video:
+    image: ghcr.io/ghalehnoei/news-scraper/worker:latest
+    environment:
+      WORKER_SOURCE: afp_video
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-news_db}}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_BUCKET: ${S3_BUCKET:-news-images}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_USE_SSL: ${S3_USE_SSL:-false}
+      S3_VERIFY_SSL: ${S3_VERIFY_SSL:-true}
+      POLL_INTERVAL: ${POLL_INTERVAL:-300}
+      MAX_REQUESTS_PER_MINUTE: ${MAX_REQUESTS_PER_MINUTE:-30}
+      DELAY_BETWEEN_REQUESTS: ${DELAY_BETWEEN_REQUESTS:-2.0}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      AFP_USERNAME: ${AFP_USERNAME}
+      AFP_PASSWORD: ${AFP_PASSWORD}
+      AFP_BASIC_AUTH: ${AFP_BASIC_AUTH}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      news_network:
+        ipv4_address: 10.20.10.57
+
+  worker-afp-photo:
+    image: ghcr.io/ghalehnoei/news-scraper/worker:latest
+    environment:
+      WORKER_SOURCE: afp_photo
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-news_db}}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_BUCKET: ${S3_BUCKET:-news-images}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_USE_SSL: ${S3_USE_SSL:-false}
+      S3_VERIFY_SSL: ${S3_VERIFY_SSL:-true}
+      POLL_INTERVAL: ${POLL_INTERVAL:-300}
+      MAX_REQUESTS_PER_MINUTE: ${MAX_REQUESTS_PER_MINUTE:-30}
+      DELAY_BETWEEN_REQUESTS: ${DELAY_BETWEEN_REQUESTS:-2.0}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      AFP_USERNAME: ${AFP_USERNAME}
+      AFP_PASSWORD: ${AFP_PASSWORD}
+      AFP_BASIC_AUTH: ${AFP_BASIC_AUTH}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      news_network:
+        ipv4_address: 10.20.10.58
 
   volumes:
   postgres_data:

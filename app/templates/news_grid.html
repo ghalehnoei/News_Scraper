@@ -6,12 +6,12 @@
 <div class="news-layout">
     <aside class="sources-sidebar">
         <div class="sidebar-section">
-            <h2>منابع خبری</h2>
+            <h2>اخبار داخلی</h2>
             <ul class="sources-list">
                 <li>
                     <a href="/ui/news{% if current_category or current_query %}?{% endif %}{% if current_category %}category={{ current_category }}{% endif %}{% if current_category and current_query %}&{% endif %}{% if current_query %}q={{ current_query }}{% endif %}" 
                        class="{% if not current_source or current_source == '' %}active{% endif %}">
-                        همه منابع
+                        همه اخبار داخلی
                     </a>
                 </li>
                 {% for source_item in sources %}
@@ -26,22 +26,38 @@
         </div>
         
         <div class="sidebar-section">
-            <h2>دسته‌بندی‌ها</h2>
+            <h2>اخبار ورزشی</h2>
             <ul class="sources-list">
                 <li>
-                    <a href="/ui/news{% if current_source or current_query %}?{% endif %}{% if current_source %}source={{ current_source }}{% endif %}{% if current_source and current_query %}&{% endif %}{% if current_query %}q={{ current_query }}{% endif %}" 
-                       class="{% if not current_category %}active{% endif %}">
-                        همه دسته‌بندی‌ها
+                    <a href="/ui/news?sports_only=true{% if current_query %}&q={{ current_query }}{% endif %}" 
+                       class="{% if current_sports_only %}active{% endif %}">
+                        ⚽ همه اخبار ورزشی
                     </a>
                 </li>
-                {% for cat_item in categories %}
+            </ul>
+        </div>
+        
+        <div class="sidebar-section">
+            <h2>اخبار خارجی</h2>
+            <ul class="sources-list">
                 <li>
-                    <a href="/ui/news?category={{ cat_item.key }}{% if current_source %}&source={{ current_source }}{% endif %}{% if current_query %}&q={{ current_query }}{% endif %}" 
-                       class="{% if current_category == cat_item.key %}active{% endif %}">
-                        {{ cat_item.name }}
+                    <a href="/ui/news?international_type=photo{% if current_query %}&q={{ current_query }}{% endif %}" 
+                       class="{% if current_international_type == 'photo' %}active{% endif %}">
+                        📷 عکس
                     </a>
                 </li>
-                {% endfor %}
+                <li>
+                    <a href="/ui/news?international_type=video{% if current_query %}&q={{ current_query }}{% endif %}" 
+                       class="{% if current_international_type == 'video' %}active{% endif %}">
+                        🎥 ویدئو
+                    </a>
+                </li>
+                <li>
+                    <a href="/ui/news?international_type=text{% if current_query %}&q={{ current_query }}{% endif %}" 
+                       class="{% if current_international_type == 'text' %}active{% endif %}">
+                        📰 متن
+                    </a>
+                </li>
             </ul>
         </div>
     </aside>

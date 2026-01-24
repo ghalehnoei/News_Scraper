@@ -292,6 +292,8 @@ async def news_grid(
     offset: int = 0,
     source: Optional[str] = None,
     category: Optional[str] = None,
+    international_type: Optional[str] = None,
+    sports_only: Optional[bool] = None,
     q: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
@@ -359,6 +361,43 @@ async def news_grid(
     if source:
         query = query.where(News.source == source)
     
+    # Apply international type filter (AFP, Reuters, APTN by content type)
+    if international_type:
+        international_sources = []
+        if international_type == "photo":
+            international_sources = ["afp_photo", "reuters_photos", "aptn_photo"]
+        elif international_type == "video":
+            international_sources = ["afp_video", "reuters_video", "aptn_video"]
+        elif international_type == "text":
+            international_sources = ["afp_text", "reuters_text", "aptn_text"]
+        
+        if international_sources:
+            query = query.where(News.source.in_(international_sources))
+    
+    # Apply sports filter (domestic sources only with sports category)
+    if sports_only:
+        # Define international sources to exclude
+        international_sources = {
+            "reuters_photos", "reuters_text", "reuters_video",
+            "afp_text", "afp_video", "afp_photo", 
+            "aptn_text", "aptn_video", "aptn_photo"
+        }
+        
+        query = query.where(
+            and_(
+                # Sports content criteria
+                or_(
+                    News.category == "sports",
+                    News.raw_category.ilike("%ورزش%"),
+                    News.raw_category.ilike("%sport%"),
+                    News.title.ilike("%ورزش%"),
+                    News.source == "varzesh3"  # Varzesh3 is primarily sports
+                ),
+                # Exclude international sources
+                ~News.source.in_(international_sources)
+            )
+        )
+    
     if category:
         # Check if category is a normalized category or raw category
         if category in normalized_categories:
@@ -382,10 +421,21 @@ async def news_grid(
     sources_result = await db.execute(sources_query)
     available_sources = [row[0] for row in sources_result.all()]
     
-    # Map sources to Persian names
+    # Filter out international sources (AFP, Reuters, APTN) - they are shown in separate section
+    international_sources = {
+        "reuters_photos", "reuters_text", "reuters_video",
+        "afp_text", "afp_video", "afp_photo", 
+        "aptn_text", "aptn_video", "aptn_photo"
+    }
+    
+    # Map sources to Persian names (only domestic sources)
     # NOTE: use a different variable name to avoid shadowing the incoming `source` param
     sources_with_names = []
     for source_key in available_sources:
+        # Skip international sources - they have their own section
+        if source_key in international_sources:
+            continue
+            
         persian_name = map_source_persian_name(source_key)
         color = SOURCE_COLORS.get(source_key, "#95a5a6")  # Default gray
         sources_with_names.append({
@@ -554,6 +604,44 @@ async def news_grid(
     count_query = select(func.count(News.id))
     if source:
         count_query = count_query.where(News.source == source)
+    
+    # Apply international type filter for count
+    if international_type:
+        international_sources = []
+        if international_type == "photo":
+            international_sources = ["afp_photo", "reuters_photos", "aptn_photo"]
+        elif international_type == "video":
+            international_sources = ["afp_video", "reuters_video", "aptn_video"]
+        elif international_type == "text":
+            international_sources = ["afp_text", "reuters_text", "aptn_text"]
+        
+        if international_sources:
+            count_query = count_query.where(News.source.in_(international_sources))
+    
+    # Apply sports filter for count (domestic sources only)
+    if sports_only:
+        # Define international sources to exclude
+        international_sources = {
+            "reuters_photos", "reuters_text", "reuters_video",
+            "afp_text", "afp_video", "afp_photo", 
+            "aptn_text", "aptn_video", "aptn_photo"
+        }
+        
+        count_query = count_query.where(
+            and_(
+                # Sports content criteria
+                or_(
+                    News.category == "sports",
+                    News.raw_category.ilike("%ورزش%"),
+                    News.raw_category.ilike("%sport%"),
+                    News.title.ilike("%ورزش%"),
+                    News.source == "varzesh3"  # Varzesh3 is primarily sports
+                ),
+                # Exclude international sources
+                ~News.source.in_(international_sources)
+            )
+        )
+    
     if category:
         # Check if category is a normalized category or raw category
         if category in normalized_categories:
@@ -592,6 +680,8 @@ async def news_grid(
         current_source=current_source_normalized,
         categories=available_categories,
         current_category=category,
+        current_international_type=international_type,
+        current_sports_only=sports_only,
         current_query=q,
         search_words=search_words,
         search_error=search_error,

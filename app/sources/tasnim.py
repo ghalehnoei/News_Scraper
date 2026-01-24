@@ -26,7 +26,7 @@ from app.workers.rate_limiter import RateLimiter
 logger = setup_logging(source="tasnim")
 
 # Archive page URL
-TASNIM_ARCHIVE_URL = "https://www.tasnimnews.com/fa/archive"
+TASNIM_ARCHIVE_URL = "https://www.tasnimnews.ir/fa/archive"
 
 # HTTP client settings
 HTTP_TIMEOUT = aiohttp.ClientTimeout(total=30, connect=10)
@@ -190,14 +190,14 @@ class TasnimWorker(BaseWorker):
                     
                     # Normalize URL
                     if href.startswith('/'):
-                        url = urljoin('https://www.tasnimnews.com', href)
+                        url = urljoin('https://www.tasnimnews.ir', href)
                     elif href.startswith('http'):
                         url = href
                     else:
                         continue
                     
                     # Only process Tasnim news URLs
-                    if 'tasnimnews.com' not in url:
+                    if 'tasnimnews.ir' not in url:
                         continue
                     
                     # Check if it's a news article URL
@@ -256,13 +256,13 @@ class TasnimWorker(BaseWorker):
                         continue
                     
                     if href.startswith('/'):
-                        url = urljoin('https://www.tasnimnews.com', href)
+                        url = urljoin('https://www.tasnimnews.ir', href)
                     elif href.startswith('http'):
                         url = href
                     else:
                         continue
                     
-                    if 'tasnimnews.com' not in url:
+                    if 'tasnimnews.ir' not in url:
                         continue
                     
                     is_news_url = (

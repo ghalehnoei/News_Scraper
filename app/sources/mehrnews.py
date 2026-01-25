@@ -20,8 +20,9 @@ from app.core.category_normalizer import normalize_category
 from app.db.base import AsyncSessionLocal
 from app.db.models import News
 from app.storage.s3 import get_s3_session, init_s3
-from app.workers.base_worker import BaseWorker
-from app.workers.rate_limiter import RateLimiter
+from app.workers.web_scraper_worker import WebScraperWorker
+from app.services.news_repository import NewsRepository
+from app.services.article_processor import ArticleProcessor
 
 logger = setup_logging(source="mehrnews")
 
@@ -33,21 +34,17 @@ HTTP_TIMEOUT = aiohttp.ClientTimeout(total=30, connect=10)
 HTTP_RETRIES = 3
 
 
-class MehrNewsWorker(BaseWorker):
+class MehrNewsWorker(WebScraperWorker):
     """Worker for MehrNews RSS feed."""
 
     def __init__(self):
         """Initialize MehrNews worker."""
         super().__init__("mehrnews")
         self.rss_url = MEHRNEWS_RSS_URL
-        self.http_session: Optional[aiohttp.ClientSession] = None
         self._s3_initialized = False
         
-        # Initialize rate limiter
-        self.rate_limiter = RateLimiter(
-            max_requests_per_minute=settings.max_requests_per_minute,
-            delay_between_requests=settings.delay_between_requests,
-        )
+        # Initialize article processor
+        self.article_processor = ArticleProcessor(source_name="mehrnews")
 
     async def _get_http_session(self) -> aiohttp.ClientSession:
         """Get or create HTTP session."""
@@ -495,58 +492,58 @@ class MehrNewsWorker(BaseWorker):
 
     async def _save_article(self, rss_item: dict, article_content: dict, s3_image_url: str) -> None:
         """
-        Save article to database.
+        Save article to database using NewsRepository.
 
         Args:
             rss_item: RSS item data
             article_content: Extracted article content
             s3_image_url: S3 URL for the image
         """
-        async with AsyncSessionLocal() as db:
-            try:
-                # Check if URL already exists
-                if await self._check_url_exists(rss_item["link"], db):
-                    self.logger.debug(
-                        f"Article already exists, skipping: {rss_item['link']}",
-                        extra={"article_url": rss_item["link"]}
-                    )
-                    return
+        # Check if URL already exists using NewsRepository
+        if await NewsRepository.get_by_url(rss_item["link"]):
+            self.logger.debug(
+                f"Article already exists, skipping: {rss_item['link']}",
+                extra={"article_url": rss_item["link"]}
+            )
+            return
 
-                # Get raw category
-                raw_category = article_content.get("category") or rss_item.get("category", "")
-                
-                # Normalize category
-                normalized_category, preserved_raw_category = normalize_category("mehrnews", raw_category)
-                
-                # Create news article
-                news = News(
-                    source="mehrnews",
-                    title=article_content.get("title") or rss_item["title"],
-                    body_html=article_content.get("body_html", ""),
-                    summary=article_content.get("summary") or rss_item.get("description", ""),
-                    url=rss_item["link"],
-                    published_at=rss_item.get("pubDate", ""),
-                    image_url=s3_image_url,
-                    category=normalized_category,  # Store normalized category
-                    raw_category=preserved_raw_category,  # Store original category
-                    language="fa",  # Persian language
-                )
-
-                db.add(news)
-                await db.commit()
-
-                self.logger.info(
-                    f"Saved article: {news.title[:50]}...",
-                    extra={"article_url": rss_item["link"]}
-                )
-
-            except Exception as e:
-                await db.rollback()
-                self.logger.error(
-                    f"Error saving article to database: {e}",
-                    extra={"article_url": rss_item["link"]},
-                    exc_info=True
-                )
+        # Use ArticleProcessor to build the news object
+        news_data = self.article_processor.create_news_object(
+            article_data=article_content,
+            source="mehrnews",
+            url=rss_item["link"],
+            is_international=False,
+            source_type='internal'
+        )
+        
+        # Create News object with image URL
+        news = News(
+            source=news_data["source"],
+            title=article_content.get("title") or rss_item["title"],
+            body_html=article_content.get("body_html", ""),
+            summary=article_content.get("summary") or rss_item.get("description", ""),
+            url=news_data["url"],
+            published_at=rss_item.get("pubDate", ""),
+            image_url=s3_image_url,
+            category=news_data["category"],
+            raw_category=news_data["raw_category"],
+            language="fa",  # Persian language
+            priority=news_data["priority"],
+            is_international=news_data["is_international"],
+            source_type=news_data["source_type"],
+        )
+        
+        # Save using NewsRepository
+        if await NewsRepository.save(news):
+            self.logger.info(
+                f"Saved article: {news.title[:50]}...",
+                extra={"article_url": rss_item["link"]}
+            )
+        else:
+            self.logger.error(
+                f"Failed to save article to database: {rss_item['link']}",
+                extra={"article_url": rss_item["link"]}
+            )
 
     async def _ensure_s3_initialized(self) -> None:
         """Ensure S3 is initialized."""

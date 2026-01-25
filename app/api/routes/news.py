@@ -264,6 +264,8 @@ class PaginatedNewsResponse(BaseModel):
 async def get_latest_news(
     source: Optional[str] = Query(None, description="Filter by source name"),
     category: Optional[str] = Query(None, description="Filter by category"),
+    international_type: Optional[str] = Query(None, description="Filter by international source type (photo, video, text)"),
+    sports_only: Optional[bool] = Query(None, description="Filter sports news only from domestic sources"),
     q: Optional[str] = Query(None, description="Search keyword"),
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Number of items to skip"),
@@ -320,10 +322,74 @@ async def get_latest_news(
     # Build query for fetching items
     query = select(News).order_by(desc(News.created_at))
 
+    # Define international sources
+    international_sources = {
+        "reuters_photos", "reuters_text", "reuters_video",
+        "afp_text", "afp_video", "afp_photo", 
+        "aptn_text", "aptn_video", "aptn_photo"
+    }
+
+    # Default filter: exclude international sources from main page (unless specifically requested via source parameter)
+    # If user explicitly requests a source, allow it even if it's international
+    if not international_type and not sports_only and not source:
+        query = query.where(~News.source.in_(international_sources))
+        count_query = count_query.where(~News.source.in_(international_sources))
+
     # Apply source filter if provided
     if source:
         query = query.where(News.source == source)
         count_query = count_query.where(News.source == source)
+
+    # Apply international type filter (AFP, Reuters, APTN by content type)
+    if international_type:
+        international_sources = []
+        if international_type == "photo":
+            international_sources = ["afp_photo", "reuters_photos", "aptn_photo"]
+        elif international_type == "video":
+            international_sources = ["afp_video", "reuters_video", "aptn_video"]
+        elif international_type == "text":
+            international_sources = ["afp_text", "reuters_text", "aptn_text"]
+        
+        if international_sources:
+            query = query.where(News.source.in_(international_sources))
+            count_query = count_query.where(News.source.in_(international_sources))
+
+    # Apply sports filter (domestic sources only with sports category)
+    if sports_only:
+        # Define international sources to exclude
+        international_sources = {
+            "reuters_photos", "reuters_text", "reuters_video",
+            "afp_text", "afp_video", "afp_photo", 
+            "aptn_text", "aptn_video", "aptn_photo"
+        }
+        
+        query = query.where(
+            and_(
+                # Sports content criteria
+                or_(
+                    News.category == "sports",
+                    News.raw_category.ilike("%ورزش%"),
+                    News.raw_category.ilike("%sport%"),
+                    News.title.ilike("%ورزش%"),
+                    News.source == "varzesh3"  # Varzesh3 is primarily sports
+                ),
+                # Exclude international sources
+                ~News.source.in_(international_sources)
+            )
+        )
+        
+        count_query = count_query.where(
+            and_(
+                or_(
+                    News.category == "sports",
+                    News.raw_category.ilike("%ورزش%"),
+                    News.raw_category.ilike("%sport%"),
+                    News.title.ilike("%ورزش%"),
+                    News.source == "varzesh3"
+                ),
+                ~News.source.in_(international_sources)
+            )
+        )
 
     # Apply category filter if provided
     if category:
@@ -439,6 +505,15 @@ async def get_latest_news(
         # Determine text direction for title (LTR for Reuters, RTL for Persian sources)
         is_ltr = article.source in ["reuters_photos", "reuters_text", "reuters_video"]
         
+        # Calculate is_translated (international source with Persian language)
+        is_international = article.source in {
+            "reuters_photos", "reuters_text", "reuters_video",
+            "afp_text", "afp_video", "afp_photo", 
+            "aptn_text", "aptn_video", "aptn_photo"
+        }
+        language = getattr(article, 'language', 'en')
+        is_translated = is_international and language == 'fa'
+        
         items.append({
             "id": str(article.id),
             "source": article.source,  # Keep original source code for filtering
@@ -456,8 +531,9 @@ async def get_latest_news(
             "raw_category": article.raw_category,
             "is_ltr": is_ltr,  # Text direction flag for title
             "is_breaking": getattr(article, 'is_breaking', False) or any(keyword in article.title.upper() for keyword in ["BREAKING", "URGENT", "FLASH"]),
-            "language": getattr(article, 'language', 'en'),  # Language code
+            "language": language,  # Language code
             "priority": getattr(article, 'priority', 5),  # Reuters priority level (1-5)
+            "is_translated": is_translated,  # Whether article is translated from international source
         })
 
     # Calculate has_more

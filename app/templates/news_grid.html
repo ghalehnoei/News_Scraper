@@ -529,6 +529,12 @@ function buildQueryParams(offset) {
     {% if current_category %}
     params.set('category', '{{ current_category }}');
     {% endif %}
+    {% if current_international_type %}
+    params.set('international_type', '{{ current_international_type }}');
+    {% endif %}
+    {% if current_sports_only %}
+    params.set('sports_only', 'true');
+    {% endif %}
     {% if current_query %}
     params.set('q', '{{ current_query }}');
     {% endif %}

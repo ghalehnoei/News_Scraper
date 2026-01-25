@@ -26,17 +26,18 @@ load_dotenv(override=True)
 
 from app.core.config import settings
 from app.core.logging import setup_logging
-from app.core.category_normalizer import normalize_category
-from app.db.base import AsyncSessionLocal
 from app.db.models import News
 from app.storage.s3 import get_s3_session, init_s3
-from app.workers.base_worker import BaseWorker
+from app.workers.api_worker import APIWorker
 from app.workers.rate_limiter import RateLimiter
+from app.services.http_client import HTTPClient
+from app.services.news_repository import NewsRepository
+from app.services.article_processor import ArticleProcessor
 
 logger = setup_logging()
 
 
-class AFPVideoWorker(BaseWorker):
+class AFPVideoWorker(APIWorker):
     """Worker for fetching video articles from AFP API."""
 
     def __init__(self):
@@ -74,10 +75,14 @@ class AFPVideoWorker(BaseWorker):
         self.http_session: Optional[aiohttp.ClientSession] = None
         self._s3_initialized = False
 
-        self.rate_limiter = RateLimiter(
-            max_requests_per_minute=settings.max_requests_per_minute,
-            delay_between_requests=settings.delay_between_requests,
-        )
+        # Initialize HTTP client
+        self.http_client = HTTPClient(source_name=self.source_name)
+
+        # Initialize news repository
+        self.news_repo = NewsRepository()
+
+        # Initialize article processor
+        self.article_processor = ArticleProcessor(source_name=self.source_name)
 
     async def _get_http_session(self) -> aiohttp.ClientSession:
         """Get or create HTTP session with proper headers."""
@@ -164,13 +169,6 @@ class AFPVideoWorker(BaseWorker):
             return None
 
         try:
-            await self.rate_limiter.acquire(
-                source=self.source_name,
-                request_type="api"
-            )
-
-            session = await self._get_http_session()
-
             # AFP search endpoint
             search_url = "https://afp-apicore-prod.afp.com/v1/api/search?wt=g2"
 
@@ -201,8 +199,11 @@ class AFPVideoWorker(BaseWorker):
                 }
             }
 
+            response = await self.http_client.post(search_url, json=body, headers=headers)
+            if response is None:
+                return None
 
-            async with session.post(search_url, headers=headers, json=body) as response:
+            try:
                 if response.status != 200:
                     self.logger.error(f"Search failed with status {response.status}")
                     response_text = await response.text()
@@ -211,6 +212,8 @@ class AFPVideoWorker(BaseWorker):
 
                 json_response = await response.json()
                 return json_response
+            finally:
+                response.close()
 
         except Exception as e:
             self.logger.error(f"Error searching AFP videos: {e}", exc_info=True)
@@ -347,16 +350,7 @@ class AFPVideoWorker(BaseWorker):
 
     async def _article_exists(self, guid: str) -> bool:
         """Check if article already exists in database by GUID."""
-        try:
-            async with AsyncSessionLocal() as db:
-                result = await db.execute(
-                    select(News).where(News.url == f"afp:{guid}")
-                )
-                exists = result.scalar_one_or_none() is not None
-                return exists
-        except Exception as e:
-            self.logger.error(f"Error checking article existence: {e}", exc_info=True)
-            return False
+        return await self.news_repo.get_by_url(f"afp:{guid}") is not None
 
     async def _download_image(self, url: str) -> Optional[bytes]:
         """Download image from URL."""
@@ -632,60 +626,44 @@ class AFPVideoWorker(BaseWorker):
     async def _save_article(self, article_data: Dict[str, Any]) -> bool:
         """Save article to database."""
         try:
-            async with AsyncSessionLocal() as db:
-                url = f"afp:{article_data['guid']}"
-                
-                result = await db.execute(
-                    select(News).where(News.url == url)
-                )
-                existing = result.scalar_one_or_none()
+            url = f"afp:{article_data['guid']}"
 
-                if existing:
-                    return False
+            if await self.news_repo.get_by_url(url) is not None:
+                return False
 
-                raw_category = article_data.get("category", "")
-                normalized_category, preserved_raw = normalize_category(self.source_name, raw_category)
+            normalized_category, raw_category = self.article_processor.normalize_category(
+                article_data.get("category", "")
+            )
 
-                if len(preserved_raw) > 197:
-                    preserved_raw = preserved_raw[:197] + "..."
+            if len(raw_category) > 197:
+                raw_category = raw_category[:197] + "..."
 
-                published_at = None
-                if article_data.get("published_at"):
-                    try:
-                        published_at_str = article_data["published_at"]
-                        if published_at_str.endswith("Z"):
-                            published_at = datetime.fromisoformat(published_at_str.replace("Z", "+00:00"))
-                        else:
-                            published_at = datetime.fromisoformat(published_at_str)
-                    except Exception:
-                        published_at = datetime.utcnow()
+            published_at = self.article_processor.parse_date(article_data.get("published_at"))
+            if not published_at:
+                published_at = datetime.utcnow()
 
-                if not published_at:
-                    published_at = datetime.utcnow()
+            body_html = self._build_body_html(article_data)
 
-                body_html = self._build_body_html(article_data)
+            news_article = News(
+                source=self.source_name,
+                title=article_data["title"],
+                body_html=body_html,
+                summary="",
+                url=url,
+                published_at=published_at.isoformat() if hasattr(published_at, 'isoformat') else str(published_at),
+                image_url=article_data.get("image_url", ""),
+                video_url=article_data.get("video_url", ""),
+                is_vertical_image=article_data.get("is_vertical", False),
+                category=normalized_category,
+                raw_category=raw_category,
+                language=article_data.get("language", "en"),
+                priority=article_data.get("priority", 3),
+                is_international=True,
+                source_type='external',
+            )
 
-                news_article = News(
-                    source=self.source_name,
-                    title=article_data["title"],
-                    body_html=body_html,
-                    summary="",
-                    url=url,
-                    published_at=published_at.isoformat() if hasattr(published_at, 'isoformat') else str(published_at),
-                    image_url=article_data.get("image_url", ""),
-                    video_url=article_data.get("video_url", ""),
-                    is_vertical_image=article_data.get("is_vertical", False),
-                    category=normalized_category,
-                    raw_category=preserved_raw,
-                    language=article_data.get("language", "en"),
-                    priority=article_data.get("priority", 3),
-                    is_international=True,
-                    source_type='external',
-                )
-
-                db.add(news_article)
-                await db.commit()
-                return True
+            await self.news_repo.save(news_article)
+            return True
 
         except Exception as e:
             self.logger.error(f"Error saving AFP video article: {e}", exc_info=True)

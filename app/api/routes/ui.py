@@ -358,6 +358,18 @@ async def news_grid(
     # Build query - apply filters BEFORE pagination
     query = select(News).order_by(desc(News.created_at))
 
+    # Define international sources
+    international_sources = {
+        "reuters_photos", "reuters_text", "reuters_video",
+        "afp_text", "afp_video", "afp_photo", 
+        "aptn_text", "aptn_video", "aptn_photo"
+    }
+
+    # Default filter: exclude international sources from main page (unless specifically requested via source parameter)
+    # If user explicitly requests a source, allow it even if it's international
+    if not international_type and not sports_only and not source:
+        query = query.where(~News.source.in_(international_sources))
+
     if source:
         query = query.where(News.source == source)
     
@@ -602,6 +614,19 @@ async def news_grid(
 
     # Calculate pagination info
     count_query = select(func.count(News.id))
+    
+    # Define international sources
+    international_sources = {
+        "reuters_photos", "reuters_text", "reuters_video",
+        "afp_text", "afp_video", "afp_photo", 
+        "aptn_text", "aptn_video", "aptn_photo"
+    }
+    
+    # Default filter: exclude international sources from main page count (unless specifically requested via source parameter)
+    # If user explicitly requests a source, allow it even if it's international
+    if not international_type and not sports_only and not source:
+        count_query = count_query.where(~News.source.in_(international_sources))
+    
     if source:
         count_query = count_query.where(News.source == source)
     

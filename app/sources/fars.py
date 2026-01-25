@@ -25,7 +25,10 @@ from app.workers.rate_limiter import RateLimiter
 logger = setup_logging(source="fars")
 
 # Listing page URL
-FARS_SEARCH_URL = "https://farsnews.ir/search?topicID=0"
+FARS_SEARCH_URL = "https://farsnews.ir/showcase"
+
+# Default Fars logo URL for articles without images
+FARS_DEFAULT_LOGO = "https://www.farsnews.ir/images/docs/000432/n00432043-r-b-000.jpg"
 
 # HTTP client settings
 HTTP_TIMEOUT = aiohttp.ClientTimeout(total=30, connect=10)
@@ -2019,6 +2022,8 @@ class FarsWorker(BaseWorker):
                     # Download and upload main image
                     s3_image_url = ""
                     image_url = article_content.get("image_url", "")
+                    
+                    # Try to download main image
                     if image_url:
                         self.logger.debug(f"Downloading main image: {image_url}")
                         image_data = await self._download_image(image_url)
@@ -2028,6 +2033,15 @@ class FarsWorker(BaseWorker):
                             ) or ""
                         else:
                             self.logger.debug(f"Failed to download main image: {image_url}")
+                    
+                    # If no image or download failed, use Fars default logo
+                    if not s3_image_url:
+                        self.logger.debug(f"Using Fars default logo for article without image")
+                        default_logo_data = await self._download_image(FARS_DEFAULT_LOGO)
+                        if default_logo_data:
+                            s3_image_url = await self._upload_image_to_s3(
+                                default_logo_data, "fars", f"{article_url}_default_logo"
+                            ) or ""
 
                     # Process images in body_html (download, upload to S3, replace URLs)
                     body_html = article_content.get("body_html", "")

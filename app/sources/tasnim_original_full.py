@@ -20,9 +20,8 @@ from app.core.category_normalizer import normalize_category
 from app.db.base import AsyncSessionLocal
 from app.db.models import News
 from app.storage.s3 import get_s3_session, init_s3
-from app.workers.web_scraper_worker import WebScraperWorker
-from app.services.news_repository import NewsRepository
-from app.services.article_processor import ArticleProcessor
+from app.workers.base_worker import BaseWorker
+from app.workers.rate_limiter import RateLimiter
 
 logger = setup_logging(source="tasnim")
 
@@ -34,17 +33,21 @@ HTTP_TIMEOUT = aiohttp.ClientTimeout(total=30, connect=10)
 HTTP_RETRIES = 3
 
 
-class TasnimWorker(WebScraperWorker):
+class TasnimWorker(BaseWorker):
     """Worker for Tasnim News Agency archive page."""
 
     def __init__(self):
         """Initialize Tasnim worker."""
         super().__init__("tasnim")
         self.archive_url = TASNIM_ARCHIVE_URL
+        self.http_session: Optional[aiohttp.ClientSession] = None
         self._s3_initialized = False
         
-        # Initialize article processor
-        self.article_processor = ArticleProcessor(source_name="tasnim")
+        # Initialize rate limiter
+        self.rate_limiter = RateLimiter(
+            max_requests_per_minute=settings.max_requests_per_minute,
+            delay_between_requests=settings.delay_between_requests,
+        )
 
     async def _get_http_session(self) -> aiohttp.ClientSession:
         """Get or create HTTP session."""
@@ -820,51 +823,51 @@ class TasnimWorker(WebScraperWorker):
             article_content: Extracted article content
             s3_image_url: S3 URL for the image
         """
-        # Check if URL already exists using NewsRepository
-        if await NewsRepository.get_by_url(listing_item["url"]):
-            self.logger.debug(
-                f"Article already exists, skipping: {listing_item['url']}",
-                extra={"article_url": listing_item["url"]}
-            )
-            return
+        async with AsyncSessionLocal() as db:
+            try:
+                # Check if URL already exists
+                if await self._check_url_exists(listing_item["url"], db):
+                    self.logger.debug(
+                        f"Article already exists, skipping: {listing_item['url']}",
+                        extra={"article_url": listing_item["url"]}
+                    )
+                    return
 
-        # Use ArticleProcessor to build the news object
-        news_data = self.article_processor.create_news_object(
-            article_data=article_content,
-            source="tasnim",
-            url=listing_item["url"],
-            is_international=False,
-            source_type='internal'
-        )
-        
-        # Create News object with image URL
-        news = News(
-            source=news_data["source"],
-            title=article_content.get("title") or listing_item.get("title", ""),
-            body_html=article_content.get("body_html", ""),
-            summary=news_data["summary"],
-            url=news_data["url"],
-            published_at=news_data["published_at"],
-            image_url=s3_image_url,
-            category=news_data["category"],
-            raw_category=news_data["raw_category"],
-            language="fa",  # Persian language (Farsi)
-            priority=news_data["priority"],
-            is_international=news_data["is_international"],
-            source_type=news_data["source_type"],
-        )
-        
-        # Save using NewsRepository
-        if await NewsRepository.save(news):
-            self.logger.info(
-                f"Saved article: {news.title[:50]}...",
-                extra={"article_url": listing_item["url"]}
-            )
-        else:
-            self.logger.error(
-                f"Failed to save article to database: {listing_item['url']}",
-                extra={"article_url": listing_item["url"]}
-            )
+                # Get raw category
+                raw_category = article_content.get("category", "")
+                
+                # Normalize category
+                normalized_category, preserved_raw_category = normalize_category("tasnim", raw_category)
+                
+                # Create news article
+                news = News(
+                    source="tasnim",
+                    title=article_content.get("title") or listing_item.get("title", ""),
+                    body_html=article_content.get("body_html", ""),
+                    summary=article_content.get("summary", ""),
+                    url=listing_item["url"],
+                    published_at=article_content.get("published_at", ""),
+                    image_url=s3_image_url,
+                    category=normalized_category,
+                    raw_category=preserved_raw_category,
+                    language="fa",  # Persian language
+                )
+
+                db.add(news)
+                await db.commit()
+
+                self.logger.info(
+                    f"Saved article: {news.title[:50]}...",
+                    extra={"article_url": listing_item["url"]}
+                )
+
+            except Exception as e:
+                await db.rollback()
+                self.logger.error(
+                    f"Error saving article to database: {e}",
+                    extra={"article_url": listing_item["url"]},
+                    exc_info=True
+                )
 
     async def _ensure_s3_initialized(self) -> None:
         """Ensure S3 is initialized."""

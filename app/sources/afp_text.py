@@ -1,42 +1,34 @@
 """AFP Text News Worker - Fetches text articles from AFP API."""
 
 import asyncio
-import json
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
-import logging
-import base64
-import xml.etree.ElementTree as ET
-
-import aiohttp
-import requests
 import os
-from sqlalchemy import select
 from dotenv import load_dotenv
-from urllib.parse import quote_plus
+
+import requests
 
 # Load environment variables from .env file
 # Ensure .env values override any existing process env vars
 load_dotenv(override=True)
 
-from app.core.config import settings
 from app.core.logging import setup_logging
+from app.workers.api_worker import APIWorker
+from app.services.news_repository import NewsRepository
+from app.services.article_processor import ArticleProcessor
 from app.db.models import News
-from sqlalchemy import update
-from app.db.session import AsyncSessionLocal
-from app.workers.base_worker import BaseWorker
-from app.workers.rate_limiter import RateLimiter
-from app.core.category_normalizer import normalize_category
 
 logger = setup_logging()
 
 
-class AFPTextWorker(BaseWorker):
+class AFPTextWorker(APIWorker):
     """Worker for fetching text articles from AFP API."""
 
     def __init__(self):
         """Initialize AFP text worker."""
         super().__init__(source_name="afp_text")
+        self.api_base_url = "https://afp-apicore-prod.afp.com"
+        
         # Load sensitive credentials from environment variables (no defaults)
         def _clean_env(value: Optional[str]) -> Optional[str]:
             if value is None:
@@ -51,6 +43,10 @@ class AFPTextWorker(BaseWorker):
         self.afp_basic_auth = _clean_env(os.getenv("AFP_BASIC_AUTH"))
         if self.afp_basic_auth and self.afp_basic_auth.lower().startswith("basic "):
             self.afp_basic_auth = self.afp_basic_auth.split(" ", 1)[1].strip()
+        
+        # Initialize article processor
+        self.article_processor = ArticleProcessor(source_name="afp_text")
+        
         # Log presence and masked values only (never log secrets)
         def _mask(value: Optional[str]) -> str:
             if not value:
@@ -66,36 +62,11 @@ class AFPTextWorker(BaseWorker):
             _mask(self.afp_basic_auth),
         )
         self.access_token = None
-        self.http_session: Optional[aiohttp.ClientSession] = None
-        
-        # Initialize rate limiter
-        self.rate_limiter = RateLimiter(
-            max_requests_per_minute=settings.max_requests_per_minute,
-            delay_between_requests=settings.delay_between_requests,
-        )
-        
-        self.logger = logger
-
-    async def _get_http_session(self) -> aiohttp.ClientSession:
-        """Get or create HTTP session."""
-        if self.http_session is None or self.http_session.closed:
-            self.http_session = aiohttp.ClientSession(
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                }
-            )
-        return self.http_session
 
     async def _authenticate(self) -> bool:
         """Authenticate with AFP API and get access token."""
         try:
-            await self.rate_limiter.acquire(
-                source=self.source_name,
-                request_type="api"
-            )
-
-
-            # Build auth URL and headers from environment variables
+            # Check credentials
             if not self.afp_username or not self.afp_password:
                 self.logger.error("AFP credentials not set in environment (AFP_USERNAME/AFP_PASSWORD).")
                 return False
@@ -104,15 +75,15 @@ class AFPTextWorker(BaseWorker):
                 self.logger.error("AFP_BASIC_AUTH not set in environment. This is required for client authentication.")
                 return False
 
-            # Build auth URL exactly like test.py
+            # Build auth URL
             auth_url = (
-                f"https://afp-apicore-prod.afp.com/oauth/token"
+                f"{self.api_base_url}/oauth/token"
                 f"?username={self.afp_username}"
                 f"&password={self.afp_password}"
                 f"&grant_type=password"
             )
 
-            # Build headers exactly like test.py
+            # Build headers
             headers = {
                 'Accept': 'application/json',
                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -121,7 +92,7 @@ class AFPTextWorker(BaseWorker):
 
             payload = {}
 
-            # Use requests module for authentication (exactly like test.py)
+            # Use requests module for authentication
             def authenticate_sync():
                 return requests.request("GET", auth_url, headers=headers, data=payload)
 
@@ -277,117 +248,67 @@ class AFPTextWorker(BaseWorker):
 
     async def _article_exists(self, guid: str) -> bool:
         """Check if article already exists in database by GUID."""
-        try:
-            async with AsyncSessionLocal() as db:
-                result = await db.execute(
-                    select(News).where(News.url == f"afp:{guid}")
-                )
-                exists = result.scalar_one_or_none() is not None
-                return exists
-        except Exception as e:
-            self.logger.error(f"Error checking article existence: {e}", exc_info=True)
-            return False
+        url = f"afp:{guid}"
+        existing = await NewsRepository.get_by_url(url)
+        return existing is not None
 
     async def _save_article(self, article_data: dict) -> bool:
-        """Save article to database."""
-        async with AsyncSessionLocal() as db:
-            try:
-                # Use GUID as unique URL identifier
-                url = f"afp:{article_data['guid']}"
-                
-                result = await db.execute(
-                    select(News).where(News.url == url)
-                )
-                existing = result.scalar_one_or_none()
-                
-                if existing:
-                    return False
-                
-                normalized_category, raw_category = normalize_category(
-                    self.source_name,
-                    article_data.get("category")
-                )
-                
-                # Parse published date
-                published_at = None
-                if article_data.get("published_at"):
-                    try:
-                        # Try to parse various date formats
-                        published_at_str = article_data["published_at"]
-                        # Common formats: ISO 8601, Unix timestamp, etc.
-                        if isinstance(published_at_str, (int, float)):
-                            published_at = datetime.fromtimestamp(published_at_str)
-                        else:
-                            # Try ISO format
-                            published_at = datetime.fromisoformat(published_at_str.replace("Z", "+00:00"))
-                    except Exception as e:
-                        self.logger.warning(f"Could not parse date: {article_data.get('published_at')}, error: {e}")
-                        published_at = datetime.utcnow()
-                
-                if not published_at:
-                    published_at = datetime.utcnow()
-                
-                # Build body HTML with exact paragraphs from news field
-                body_html = ""
-                
-                # Add title with red color if priority is 1 or 2, otherwise default color
-                priority = article_data.get("priority", 3)
-                title = article_data.get("title", "")
-                if title:
-                    if priority in [1, 2]:
-                        body_html += f'<h2 style="color: red;">{title}</h2>'
-                    else:
-                        body_html += f'<h2>{title}</h2>'
-                
-                if article_data.get("summary"):
-                    body_html += f"<p><strong>{article_data['summary']}</strong></p>"
-                
-                # Use body_paragraphs if available, otherwise fall back to body
-                paragraphs = article_data.get("body_paragraphs", [])
-                if paragraphs:
-                    for paragraph in paragraphs:
-                        if paragraph.strip():  # Only add non-empty paragraphs
-                            body_html += f'<p style="color: black;">{paragraph}</p>'
-                elif article_data.get("body"):
-                    body_html += f'<p style="color: black;">{article_data["body"]}</p>'
-                
-                news = News(
-                    source=self.source_name,
-                    title=article_data["title"],
-                    body_html=body_html,
-                    summary=article_data.get("summary", ""),
-                    url=url,
-                    published_at=published_at.isoformat() if hasattr(published_at, 'isoformat') else str(published_at),
-                    image_url=article_data.get("image_url", ""),
-                    category=normalized_category,
-                    raw_category=raw_category,
-                    language=article_data.get("language", "en"),
-                    priority=article_data.get("priority", 3),
-                    is_international=True,  # AFP is an international source
-                    source_type='external',
-                )
-                
-                db.add(news)
-                await db.commit()
-                
+        """Save article to database using NewsRepository."""
+        try:
+            # Use GUID as unique URL identifier
+            url = f"afp:{article_data['guid']}"
+            
+            # Check if article already exists
+            if await self._article_exists(article_data['guid']):
+                return False
+            
+            # Use ArticleProcessor to build the news object
+            news_data = self.article_processor.create_news_object(
+                article_data=article_data,
+                source=self.source_name,
+                url=url,
+                is_international=True,
+                source_type='external'
+            )
+            
+            # Create News object
+            news = News(
+                source=news_data["source"],
+                title=news_data["title"],
+                body_html=news_data["body_html"],
+                summary=news_data["summary"],
+                url=news_data["url"],
+                published_at=news_data["published_at"],
+                image_url=news_data["image_url"],
+                category=news_data["category"],
+                raw_category=news_data["raw_category"],
+                language=news_data["language"],
+                priority=news_data["priority"],
+                is_international=news_data["is_international"],
+                source_type=news_data["source_type"],
+            )
+            
+            # Save using NewsRepository
+            if await NewsRepository.save(news):
                 self.logger.info(
                     f"Saved AFP article: {article_data['title'][:50]}...",
                     extra={
                         "guid": article_data["guid"],
                         "source": self.source_name,
-                        "category": normalized_category,
+                        "category": news_data["category"],
                     }
                 )
                 return True
-                
-            except Exception as e:
-                await db.rollback()
-                self.logger.error(
-                    f"Error saving article: {e}",
-                    extra={"guid": article_data.get("guid"), "error": str(e)},
-                    exc_info=True
-                )
+            else:
                 return False
+                
+        except Exception as e:
+            self.logger.error(
+                f"Error saving article: {e}",
+                extra={"guid": article_data.get("guid"), "error": str(e)},
+                exc_info=True
+            )
+            return False
 
     async def fetch_news(self) -> None:
         """Fetch text news from AFP API."""

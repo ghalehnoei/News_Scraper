@@ -71,7 +71,6 @@ class APPhotoWorker(BaseWorker):
         )
         
         self.logger = logger
-        self.next_page_url: Optional[str] = None
 
     async def _get_http_session(self) -> aiohttp.ClientSession:
         """Get or create HTTP session."""
@@ -364,9 +363,6 @@ class APPhotoWorker(BaseWorker):
             data = feed_data.get("data", {})
             items = data.get("items", [])
             
-            # Store next_page for next cycle
-            self.next_page_url = data.get("next_page")
-            
             self.logger.info(f"Found {len(items)} items in feed")
             
             for item_data in items:
@@ -652,16 +648,16 @@ class APPhotoWorker(BaseWorker):
             saved_count = 0
             skipped_count = 0
             
-            # Use next_page from previous cycle, or start with base URL
-            feed_url = self.next_page_url if self.next_page_url else None
+            # Always use base URL (no pagination)
+            base_url = "https://api.ap.org/media/v/content/feed?q=type:picture&page_size=20"
             
             # Fetch feed
-            feed_data = await self._fetch_feed(feed_url)
+            feed_data = await self._fetch_feed(base_url)
             if not feed_data:
                 self.logger.warning("No feed data received")
                 return
             
-            # Parse articles (stores next_page_url in self.next_page_url for next cycle)
+            # Parse articles
             articles = await self._parse_feed_items(feed_data)
             if not articles:
                 self.logger.info("No articles parsed from feed")
@@ -705,8 +701,6 @@ class APPhotoWorker(BaseWorker):
                     continue
             
             self.logger.info(f"Processed {total} articles, saved {saved_count}, skipped {skipped_count}")
-            if self.next_page_url:
-                self.logger.info(f"Next page URL stored for next cycle: {self.next_page_url[:100]}...")
             
         except Exception as e:
             self.logger.error(f"Error in fetch_news: {e}", exc_info=True)

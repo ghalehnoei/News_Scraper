@@ -66,6 +66,7 @@ class APTextWorker(BaseWorker):
         )
         
         self.logger = logger
+        # Store next page URL for pagination (AP provides `next_page` in feed data)
         self.next_page_url: Optional[str] = None
 
     async def _get_http_session(self) -> aiohttp.ClientSession:
@@ -96,7 +97,7 @@ class APTextWorker(BaseWorker):
             
             # Use provided URL or default feed URL
             if not url:
-                url = "https://api.ap.org/media/v/content/feed?q=type:text&page_size=50"
+                url = "https://api.ap.org/media/v/content/feed?q=type:text&page_size=20"
             
             headers = {
                 "Accept": "application/json",
@@ -250,10 +251,10 @@ class APTextWorker(BaseWorker):
             data = feed_data.get("data", {})
             items = data.get("items", [])
             
-            # Store next_page for next cycle
+            # Store next_page for next cycle (if provided by AP feed)
             self.next_page_url = data.get("next_page")
-            
-            self.logger.info(f"Found {len(items)} items in feed")
+
+            self.logger.info(f"Found {len(items)} items in feed (next_page: {self.next_page_url})")
             
             for item_data in items:
                 try:
@@ -370,18 +371,25 @@ class APTextWorker(BaseWorker):
             self.logger.error(f"Error parsing feed items: {e}", exc_info=True)
             return []
 
-    async def _article_exists(self, guid: str) -> bool:
-        """Check if article already exists in database by GUID."""
+    async def _get_existing_guids(self) -> set[str]:
+        """Get all existing GUIDs from database in one query."""
         try:
             async with AsyncSessionLocal() as db:
+                # Fetch all URLs that start with "aptn:" for this source
                 result = await db.execute(
-                    select(News).where(News.url == f"aptn:{guid}")
+                    select(News.url).where(
+                        News.source == self.source_name,
+                        News.url.like("aptn:%")
+                    )
                 )
-                exists = result.scalar_one_or_none() is not None
-                return exists
+                urls = result.scalars().all()
+                # Extract GUIDs from URLs (format: "aptn:GUID")
+                guids = {url.split(":", 1)[1] for url in urls if ":" in url}
+                self.logger.debug(f"Found {len(guids)} existing articles in database")
+                return guids
         except Exception as e:
-            self.logger.error(f"Error checking article existence: {e}", exc_info=True)
-            return False
+            self.logger.error(f"Error fetching existing GUIDs: {e}", exc_info=True)
+            return set()
 
     async def _save_article(self, article_data: dict) -> bool:
         """Save article to database."""
@@ -484,16 +492,20 @@ class APTextWorker(BaseWorker):
             saved_count = 0
             skipped_count = 0
             
-            # Use next_page from previous cycle, or start with base URL
-            feed_url = self.next_page_url if self.next_page_url else None
-            
+            # Base URL (used when next_page_url is not available)
+            base_url = "https://api.ap.org/media/v/content/feed?q=type:text"
+
+            # If we have a next_page_url from previous run, continue from there
+            feed_url = self.next_page_url if getattr(self, "next_page_url", None) else base_url
+            self.logger.debug(f"Fetching feed URL: {feed_url}")
+
             # Fetch feed
             feed_data = await self._fetch_feed(feed_url)
             if not feed_data:
                 self.logger.warning("No feed data received")
                 return
             
-            # Parse articles (stores next_page_url in self.next_page_url for next cycle)
+            # Parse articles
             articles = await self._parse_feed_items(feed_data)
             if not articles:
                 self.logger.info("No articles parsed from feed")
@@ -502,27 +514,35 @@ class APTextWorker(BaseWorker):
             total = len(articles)
             self.logger.info(f"Processing {total} articles...")
             
+            # Batch check for existing articles (much faster than individual queries)
+            existing_guids = await self._get_existing_guids()
+            
             for i, article in enumerate(articles, 1):
                 try:
                     guid = article.get("guid")
                     if not guid:
                         continue
                     
-                    if await self._article_exists(guid):
+                    # Check against in-memory set (O(1) lookup)
+                    if guid in existing_guids:
                         skipped_count += 1
                         continue
                     
+                    # Log title for first received article
+                    title = article.get('title', 'N/A')
+                    self.logger.info(f"First received - Title: {title}")
+                    
                     if await self._save_article(article):
                         saved_count += 1
-                        self.logger.info(f"Saved {saved_count}/{total}: {article.get('title', 'N/A')[:50]}")
+                        # Add to set to avoid duplicate saves in same batch
+                        existing_guids.add(guid)
+                        self.logger.info(f"Saved {saved_count}/{total}: {title[:50]}")
                     
                 except Exception as e:
                     self.logger.error(f"Error processing article: {e}", exc_info=True)
                     continue
             
             self.logger.info(f"Processed {total} articles, saved {saved_count}, skipped {skipped_count}")
-            if self.next_page_url:
-                self.logger.info(f"Next page URL stored for next cycle: {self.next_page_url[:100]}...")
             
         except Exception as e:
             self.logger.error(f"Error in fetch_news: {e}", exc_info=True)

@@ -1,22 +1,31 @@
 """News endpoints."""
 
-import re
 import json
 import logging
+import re
 from typing import List, Optional
+from urllib.parse import urlparse
 from uuid import UUID
-from urllib.parse import urlparse, urlunparse, unquote
 
-from fastapi import APIRouter, Query, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select, desc, func, or_, and_, or_, cast, text, String
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import and_, cast, desc, func, or_, select, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_db
 from app.core.config import settings
+from app.core.constants import (
+    BREAKING_NEWS_KEYWORDS,
+    DEFAULT_LANGUAGE,
+    DEFAULT_PRIORITY,
+    INTERNATIONAL_SOURCES,
+    MAX_PAGE_LIMIT,
+    MIN_SEARCH_QUERY_LENGTH,
+    REUTERS_SOURCES,
+)
 from app.core.date_utils import format_persian_date
+from app.core.s3_utils import convert_image_url_to_presigned, extract_s3_key_from_url
 from app.db.models import News
 from app.storage.s3 import generate_presigned_url
 from app.services.video_download_service import get_download_service
@@ -267,7 +276,7 @@ async def get_latest_news(
     international_type: Optional[str] = Query(None, description="Filter by international source type (photo, video, text)"),
     sports_only: Optional[bool] = Query(None, description="Filter sports news only from domestic sources"),
     q: Optional[str] = Query(None, description="Search keyword"),
-    limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
+    limit: int = Query(20, ge=1, le=MAX_PAGE_LIMIT, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Number of items to skip"),
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedNewsResponse:
@@ -289,8 +298,11 @@ async def get_latest_news(
         q = q.strip()
         if q == "":
             q = None
-        elif len(q) < 2:
-            raise HTTPException(status_code=400, detail="Search query must be at least 2 characters")
+        elif len(q) < MIN_SEARCH_QUERY_LENGTH:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Search query must be at least {MIN_SEARCH_QUERY_LENGTH} characters"
+            )
         else:
             # Split query into words (split by whitespace)
             words = [word.strip() for word in q.split() if word.strip()]
@@ -322,18 +334,11 @@ async def get_latest_news(
     # Build query for fetching items
     query = select(News).order_by(desc(News.created_at))
 
-    # Define international sources
-    international_sources = {
-        "reuters_photos", "reuters_text", "reuters_video",
-        "afp_text", "afp_video", "afp_photo", 
-        "aptn_text", "aptn_video", "aptn_photo"
-    }
-
     # Default filter: exclude international sources from main page (unless specifically requested via source parameter)
     # If user explicitly requests a source, allow it even if it's international
     if not international_type and not sports_only and not source:
-        query = query.where(~News.source.in_(international_sources))
-        count_query = count_query.where(~News.source.in_(international_sources))
+        query = query.where(~News.source.in_(INTERNATIONAL_SOURCES))
+        count_query = count_query.where(~News.source.in_(INTERNATIONAL_SOURCES))
 
     # Apply source filter if provided
     if source:
@@ -356,13 +361,6 @@ async def get_latest_news(
 
     # Apply sports filter (domestic sources only with sports category)
     if sports_only:
-        # Define international sources to exclude
-        international_sources = {
-            "reuters_photos", "reuters_text", "reuters_video",
-            "afp_text", "afp_video", "afp_photo", 
-            "aptn_text", "aptn_video", "aptn_photo"
-        }
-        
         query = query.where(
             and_(
                 # Sports content criteria
@@ -374,7 +372,7 @@ async def get_latest_news(
                     News.source == "varzesh3"  # Varzesh3 is primarily sports
                 ),
                 # Exclude international sources
-                ~News.source.in_(international_sources)
+                ~News.source.in_(INTERNATIONAL_SOURCES)
             )
         )
         
@@ -387,7 +385,7 @@ async def get_latest_news(
                     News.title.ilike("%ورزش%"),
                     News.source == "varzesh3"
                 ),
-                ~News.source.in_(international_sources)
+                ~News.source.in_(INTERNATIONAL_SOURCES)
             )
         )
 
@@ -416,82 +414,7 @@ async def get_latest_news(
     items = []
     for article in articles:
         # Generate presigned URL for image if it exists
-        image_url = article.image_url
-        if image_url:
-            try:
-                # Check if it's already a presigned URL (has query parameters with signature)
-                if '?' in image_url and ('X-Amz-Signature' in image_url or 'signature' in image_url.lower()):
-                    # Already presigned, use as-is
-                    pass
-                else:
-                    # Remove query string and fragment from URL before processing
-                    # This prevents duplicate query strings when URL is already presigned
-                    parsed = urlparse(image_url)
-                    
-                    # Decode URL-encoded path to handle cases where query string is encoded in path
-                    decoded_path = unquote(parsed.path)
-                    
-                    # Remove query string from decoded path if it exists
-                    if '?' in decoded_path:
-                        decoded_path = decoded_path.split('?')[0]
-                    
-                    # Reconstruct URL without query string and fragment
-                    clean_url = urlunparse((parsed.scheme, parsed.netloc, decoded_path, '', '', ''))
-                    
-                    # Extract S3 key from URL
-                    # Stored format can be:
-                    # 1. s3://bucket/path (e.g., s3://output/news-images/iribnews/2025/12/30/abc123.jpg)
-                    # 2. {endpoint}/{bucket}/{key} (e.g., https://gpmedia.iribnews.ir/output/news-images/...)
-                    # 3. Just the key (e.g., news-images/iribnews/2025/12/30/abc123.jpg)
-                    # 4. Relative path (e.g., news-images/reuters_video/2026/01/06/2a4f0323.jpg)
-                    if clean_url.startswith("s3://"):
-                        # Parse s3://bucket/path format
-                        path_after_s3 = clean_url[5:]  # Remove "s3://"
-                        parts = path_after_s3.split("/", 1)
-                        if len(parts) == 2:
-                            s3_key = parts[1]
-                        else:
-                            s3_key = path_after_s3
-                        logger.debug(f"Extracted S3 key from s3:// URL: {s3_key}")
-                    elif clean_url.startswith(settings.s3_endpoint):
-                        # Remove endpoint and bucket to get the key
-                        prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}/"
-                        if clean_url.startswith(prefix):
-                            s3_key = clean_url[len(prefix):]
-                        else:
-                            # Try without trailing slash
-                            prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}"
-                            if clean_url.startswith(prefix):
-                                s3_key = clean_url[len(prefix):].lstrip("/")
-                            else:
-                                # Path might have bucket name duplicated, try to extract key
-                                # Example: https://gpmedia.nrms.ir/news-images/news-images/mashreghnews/...
-                                path_parts = decoded_path.lstrip("/").split("/")
-                                if len(path_parts) > 1 and path_parts[0] == path_parts[1]:
-                                    # Bucket name is duplicated, skip first occurrence
-                                    s3_key = "/".join(path_parts[1:])
-                                else:
-                                    s3_key = decoded_path.lstrip("/")
-                    elif not parsed.scheme and not parsed.netloc:
-                        # Relative path (no scheme, no netloc) - assume it's an S3 key
-                        # Examples: news-images/reuters_video/2026/01/06/2a4f0323.jpg
-                        #           news-videos/reuters_video/2026/01/06/a74f8683.mp4
-                        s3_key = decoded_path.lstrip("/")
-                        logger.debug(f"Detected relative path as S3 key: {s3_key}")
-                    else:
-                        # Assume it's already an S3 key
-                        s3_key = clean_url
-                    
-                    # Remove any remaining query string from S3 key
-                    if '?' in s3_key:
-                        s3_key = s3_key.split('?')[0]
-                    
-                    presigned = await generate_presigned_url(s3_key)
-                    if presigned:
-                        image_url = presigned
-            except Exception as e:
-                # If presigned URL generation fails, use original URL
-                logger.warning(f"Failed to generate presigned URL for {image_url}: {e}", exc_info=True)
+        image_url = await convert_image_url_to_presigned(article.image_url)
         
         # Format published_at to Persian date
         published_at_persian = None
@@ -503,15 +426,11 @@ async def get_latest_news(
         source_color = map_source_color(article.source)
         
         # Determine text direction for title (LTR for Reuters, RTL for Persian sources)
-        is_ltr = article.source in ["reuters_photos", "reuters_text", "reuters_video"]
+        is_ltr = article.source in REUTERS_SOURCES
         
         # Calculate is_translated (international source with Persian language)
-        is_international = article.source in {
-            "reuters_photos", "reuters_text", "reuters_video",
-            "afp_text", "afp_video", "afp_photo", 
-            "aptn_text", "aptn_video", "aptn_photo"
-        }
-        language = getattr(article, 'language', 'en')
+        is_international = article.source in INTERNATIONAL_SOURCES
+        language = getattr(article, 'language', DEFAULT_LANGUAGE)
         is_translated = is_international and language == 'fa'
         
         items.append({
@@ -530,9 +449,11 @@ async def get_latest_news(
             "category": article.category,
             "raw_category": article.raw_category,
             "is_ltr": is_ltr,  # Text direction flag for title
-            "is_breaking": getattr(article, 'is_breaking', False) or any(keyword in article.title.upper() for keyword in ["BREAKING", "URGENT", "FLASH"]),
+            "is_breaking": getattr(article, 'is_breaking', False) or any(
+                keyword in article.title.upper() for keyword in BREAKING_NEWS_KEYWORDS
+            ),
             "language": language,  # Language code
-            "priority": getattr(article, 'priority', 5),  # Reuters priority level (1-5)
+            "priority": getattr(article, 'priority', DEFAULT_PRIORITY),  # Reuters priority level (1-5)
             "is_translated": is_translated,  # Whether article is translated from international source
         })
 
@@ -757,81 +678,7 @@ async def get_news_by_id(
         raise HTTPException(status_code=404, detail=f"News article not found: {news_id}")
 
     # Generate presigned URL for image if it exists
-    image_url = article.image_url
-    if image_url:
-        try:
-            # Check if it's already a presigned URL (has query parameters with signature)
-            if '?' in image_url and ('X-Amz-Signature' in image_url or 'signature' in image_url.lower()):
-                # Already presigned, use as-is
-                pass
-            else:
-                # Remove query string and fragment from URL before processing
-                # This prevents duplicate query strings when URL is already presigned
-                parsed = urlparse(image_url)
-                
-                # Decode URL-encoded path to handle cases where query string is encoded in path
-                decoded_path = unquote(parsed.path)
-                
-                # Remove query string from decoded path if it exists
-                if '?' in decoded_path:
-                    decoded_path = decoded_path.split('?')[0]
-                
-                # Reconstruct URL without query string and fragment
-                clean_url = urlunparse((parsed.scheme, parsed.netloc, decoded_path, '', '', ''))
-                
-                # Extract S3 key from URL
-                # Stored format can be:
-                # 1. s3://bucket/path (e.g., s3://output/news-images/iribnews/2025/12/30/abc123.jpg)
-                # 2. {endpoint}/{bucket}/{key} (e.g., https://gpmedia.iribnews.ir/output/news-images/...)
-                # 3. Just the key (e.g., news-images/iribnews/2025/12/30/abc123.jpg)
-                # 4. Relative path (e.g., news-images/reuters_video/2026/01/06/2a4f0323.jpg)
-                if clean_url.startswith("s3://"):
-                    # Parse s3://bucket/path format
-                    path_after_s3 = clean_url[5:]  # Remove "s3://"
-                    parts = path_after_s3.split("/", 1)
-                    if len(parts) == 2:
-                        s3_key = parts[1]
-                    else:
-                        s3_key = path_after_s3
-                    logger.debug(f"Extracted S3 key from s3:// URL: {s3_key}")
-                elif clean_url.startswith(settings.s3_endpoint):
-                    prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}/"
-                    if clean_url.startswith(prefix):
-                        s3_key = clean_url[len(prefix):]
-                    else:
-                        # Try without trailing slash
-                        prefix = f"{settings.s3_endpoint}/{settings.s3_bucket}"
-                        if clean_url.startswith(prefix):
-                            s3_key = clean_url[len(prefix):].lstrip("/")
-                        else:
-                            # Path might have bucket name duplicated, try to extract key
-                            # Example: https://gpmedia.nrms.ir/news-images/news-images/mashreghnews/...
-                            path_parts = decoded_path.lstrip("/").split("/")
-                            if len(path_parts) > 1 and path_parts[0] == path_parts[1]:
-                                # Bucket name is duplicated, skip first occurrence
-                                s3_key = "/".join(path_parts[1:])
-                            else:
-                                s3_key = decoded_path.lstrip("/")
-                elif not parsed.scheme and not parsed.netloc:
-                    # Relative path (no scheme, no netloc) - assume it's an S3 key
-                    # Examples: news-images/reuters_video/2026/01/06/2a4f0323.jpg
-                    #           news-videos/reuters_video/2026/01/06/a74f8683.mp4
-                    s3_key = decoded_path.lstrip("/")
-                    logger.debug(f"Detected relative path as S3 key: {s3_key}")
-                else:
-                    # Assume it's already an S3 key
-                    s3_key = clean_url
-                
-                # Remove any remaining query string from S3 key
-                if '?' in s3_key:
-                    s3_key = s3_key.split('?')[0]
-                
-                presigned = await generate_presigned_url(s3_key)
-                if presigned:
-                    image_url = presigned
-        except Exception as e:
-            # If presigned URL generation fails, use original URL
-            logger.warning(f"Failed to generate presigned URL for {image_url}: {e}", exc_info=True)
+    image_url = await convert_image_url_to_presigned(article.image_url)
 
     # Convert published_at to Persian date
     published_at_persian = article.published_at
@@ -925,11 +772,11 @@ async def get_news_by_id(
         body_html = await process_body_html_images(body_html)
     
     # Determine text direction for title (LTR for Reuters, RTL for Persian sources)
-    is_ltr = article.source in ["reuters_photos", "reuters_text", "reuters_video"]
+    is_ltr = article.source in REUTERS_SOURCES
     
     # Determine if article is translated (international source with Persian language)
     is_international = getattr(article, 'is_international', False)
-    language = getattr(article, 'language', 'en')
+    language = getattr(article, 'language', DEFAULT_LANGUAGE)
     is_translated = is_international and language == 'fa'
     
     return {

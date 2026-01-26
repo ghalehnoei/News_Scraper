@@ -1,20 +1,29 @@
 """News repository for database operations."""
 
-from typing import Optional
+import logging
+from typing import List, Optional
 from datetime import datetime
+
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.category_normalizer import normalize_category
 from app.db.models import News
 from app.db.session import AsyncSessionLocal
-from app.core.category_normalizer import normalize_category
+
+logger = logging.getLogger(__name__)
 
 
 class NewsRepository:
     """
     Repository for News model operations.
     
-    Provides centralized database operations for news articles.
+    Provides centralized database operations for news articles. This class
+    follows the Repository pattern to abstract database access and provide
+    a clean interface for news-related database operations.
+    
+    All methods are static and handle their own database sessions. They
+    include proper error handling and logging.
     """
 
     @staticmethod
@@ -35,7 +44,7 @@ class NewsRepository:
                 )
                 return result.scalar_one_or_none()
         except Exception as e:
-            print(f"Error getting news by URL: {e}")
+            logger.error(f"Error getting news by URL: {e}", exc_info=True)
             return None
 
     @staticmethod
@@ -56,7 +65,7 @@ class NewsRepository:
                 return True
         except Exception as e:
             await db.rollback()
-            print(f"Error saving news: {e}")
+            logger.error(f"Error saving news: {e}", exc_info=True)
             return False
 
     @staticmethod
@@ -77,7 +86,7 @@ class NewsRepository:
                 return True
         except Exception as e:
             await db.rollback()
-            print(f"Error updating news: {e}")
+            logger.error(f"Error updating news: {e}", exc_info=True)
             return False
 
     @staticmethod
@@ -98,7 +107,7 @@ class NewsRepository:
                 )
                 return result.scalars().all()
         except Exception as e:
-            print(f"Error getting recent news: {e}")
+            logger.error(f"Error getting recent news: {e}", exc_info=True)
             return []
 
     @staticmethod

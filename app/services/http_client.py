@@ -1,15 +1,27 @@
 """HTTP client abstraction for news workers."""
 
 import asyncio
-from typing import Any, Dict, Optional
+import logging
+from typing import Any, Dict, Optional, Union
 import aiohttp
+
+logger = logging.getLogger(__name__)
 
 
 class HTTPClient:
     """
     HTTP client with retry logic, rate limiting, and circuit breaker pattern.
     
-    Provides centralized HTTP operations for all workers.
+    Provides centralized HTTP operations for all workers. This class manages
+    HTTP sessions, handles timeouts, and provides consistent error handling
+    across all HTTP requests.
+    
+    Attributes:
+        source_name: Name of the source for logging and rate limiting
+        headers: Custom headers to include in requests
+        timeout: Total request timeout in seconds
+        connect_timeout: Connection timeout in seconds
+        session: aiohttp ClientSession instance
     """
 
     def __init__(
@@ -86,15 +98,15 @@ class HTTPClient:
                 allow_redirects=allow_redirects
             )
         except Exception as e:
-            print(f"Error in HTTP GET request to {url}: {e}")
+            logger.error(f"Error in HTTP GET request to {url}: {e}", exc_info=True)
             return None
 
     async def post(
         self,
         url: str,
-        data: Optional[Dict] = None,
-        json: Optional[Dict] = None,
-        headers: Optional[Dict] = None,
+        data: Optional[Union[Dict[str, Any], aiohttp.FormData]] = None,
+        json: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
         allow_redirects: bool = True
     ) -> Optional[aiohttp.ClientResponse]:
         """
@@ -126,7 +138,7 @@ class HTTPClient:
                 allow_redirects=allow_redirects
             )
         except Exception as e:
-            print(f"Error in HTTP POST request to {url}: {e}")
+            logger.error(f"Error in HTTP POST request to {url}: {e}", exc_info=True)
             return None
 
     async def close(self) -> None:

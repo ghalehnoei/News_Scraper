@@ -1,6 +1,6 @@
 """Article processor for news articles."""
 
-from typing import Dict, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime
 
 from app.core.category_normalizer import normalize_category
@@ -11,10 +11,16 @@ class ArticleProcessor:
     Processor for news articles.
     
     Provides common article processing functionality including:
-    - Category normalization
-    - HTML body generation
-    - Date parsing
-    - News object creation
+    - Category normalization (mapping source-specific categories to standard categories)
+    - HTML body generation (creating formatted HTML from article content)
+    - Date parsing (converting various date formats to ISO format)
+    - News object creation (building normalized news dictionaries)
+    
+    This class is designed to be instantiated per source, allowing for
+    source-specific processing while sharing common functionality.
+    
+    Attributes:
+        source_name: Name of the news source this processor handles
     """
 
     def __init__(self, source_name: str):
@@ -43,7 +49,7 @@ class ArticleProcessor:
         title: str,
         summary: str,
         body: str,
-        body_paragraphs: list = None,
+        body_paragraphs: Optional[List[str]] = None,
         priority: int = 3
     ) -> str:
         """
@@ -97,7 +103,7 @@ class ArticleProcessor:
         
         return body_html
 
-    def parse_date(self, date_str: str) -> str:
+    def parse_date(self, date_str: Optional[str]) -> str:
         """
         Parse date string and return ISO format.
         
@@ -123,12 +129,12 @@ class ArticleProcessor:
 
     def create_news_object(
         self,
-        article_data: Dict,
+        article_data: Dict[str, Any],
         source: str,
         url: str,
         is_international: bool = False,
         source_type: str = "external"
-    ) -> Dict:
+    ) -> Dict[str, Any]:
         """
         Create news object from article data.
         

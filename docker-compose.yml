@@ -626,9 +626,9 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
-        networks:
-          news_network:
-            ipv4_address: 10.20.10.54
+    networks:
+      news_network:
+        ipv4_address: 10.20.10.54
 
   worker-aptn-photo:
     image: ghcr.io/ghalehnoei/news-scraper/worker:latest

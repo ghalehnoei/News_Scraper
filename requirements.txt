@@ -35,3 +35,6 @@ playwright>=1.40.0
 # Download utility for Reuters
 yt-dlp>=2024.1.0
 
+# Requests (used by some source parsers)
+requests>=2.31.0
+
